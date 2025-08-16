@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="ja" data-theme="elegant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Memo＋</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f7fb; --card:#fff; --ink:#0f172a; --muted:#64748b; --accent:#0ea5e9;
+    --border:#e5e7eb; --ok:#059669; --ok-ink:#fff;
+  }
+  [data-theme="simple"]{
+    --bg:#ffffff; --card:#ffffff; --ink:#111827; --muted:#6b7280; --accent:#2563eb; --border:#e5e7eb;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Noto Serif JP', serif; background:var(--bg); color:var(--ink);}
+  header{ position:sticky; top:0; background:#ffffffcc; backdrop-filter: blur(10px); border-bottom:1px solid var(--border); }
+  .wrap{ max-width:1100px; margin:0 auto; padding:14px; }
+  h1{ font-size:18px; margin:0; letter-spacing:.02em; }
+  .top-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .view-toggle button{ padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; color:var(--ink); }
+  .view-toggle .active{ background:var(--ink); color:#fff; }
+  .theme-toggle{ border:1px solid var(--border); background:#fff; border-radius:8px; padding:8px 10px; cursor:pointer; }
+  .row{ display:grid; gap:16px; grid-template-columns: 1fr 1.5fr; padding:16px 0; }
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; }
+  .notice{ background:#fafafc; border:1px dashed var(--border); border-left:4px solid var(--accent); border-radius:12px; padding:12px 14px; margin:10px 0 0; color:#334155; }
+  .notice small{ color:var(--muted); }
+  label{ font-size:12px; color:var(--muted); display:block; margin:10px 0 6px; }
+  input, select, textarea{ width:100%; border:1px solid var(--border); border-radius:10px; padding:10px; font-size:14px; background:#fff; }
+  textarea{ height:120px; }
+  button{ border:0; padding:10px 14px; border-radius:10px; cursor:pointer; }
+  .btn{ background:var(--ink); color:#fff; }
+  .btn-outline{ background:#fff; border:1px solid var(--border); }
+  .btn-seal{ background:var(--ok); color:var(--ok-ink); }
+  .muted{ color:var(--muted); font-size:12px; }
+  ul{ list-style:none; padding:0; margin:0; }
+  .item{ border:1px solid var(--border); border-radius:12px; padding:12px; background:#fff; }
+  .meta{ font-size:12px; color:var(--muted); }
+  .chip{ font-size:11px; display:inline-block; padding:2px 8px; border:1px solid var(--border); border-radius:999px; margin-top:4px; }
+  .bad{ background:#fee2e2; border-color:#fecaca; color:#991b1b;}
+  .good{ background:#dcfce7; border-color:#bbf7d0; color:#065f46;}
+  img.preview{ max-height:220px; border-radius:8px; border:1px solid var(--border); display:block; margin-top:8px; }
+
+  /* カレンダー */
+  .cal-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .cal-grid{ display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
+  .cal-dow{ text-align:center; font-size:12px; color:var(--muted); }
+  .cal-cell{ background:#fff; border:1px solid var(--border); border-radius:10px; min-height:90px; padding:8px; display:flex; flex-direction:column; gap:4px; }
+  .cal-date{ font-size:12px; color:#334155; display:flex; justify-content:space-between; align-items:center; }
+  .cal-cell.dim .cal-date{ color:#94a3b8; }
+  .dot{ width:6px; height:6px; border-radius:50%; background:var(--accent); display:inline-block; margin-left:6px; }
+  .cal-badges{ margin-top:4px; display:flex; flex-wrap:wrap; gap:4px; }
+  .badge{ font-size:10px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:999px; padding:1px 6px; }
+  .cal-list{ margin-top:6px; font-size:12px; color:#334155; max-height:64px; overflow:auto; }
+  .cal-evt{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* 印刷用ヘッダー（普段は非表示） */
+  .print-only{ display:none; }
+  @media (max-width: 980px){ .row{ grid-template-columns:1fr; } }
+
+  /* ---- 印刷調整：相談用（記録だけ） ---- */
+  @media print{
+    header, .noprint, #notice { display: none !important; }
+    body { background: #fff; }
+    .card { border:0; box-shadow:none; }
+    .row { display:block; }
+    .row > .card { width:100%; max-width:100%; }
+    .item { break-inside: avoid; page-break-inside: avoid; margin-bottom:12px; }
+    img.preview { max-width:100%; height:auto; }
+    .print-only{ display:block; margin: 8px 0 12px; }
+    .print-title{ font-size:18px; font-weight:700; margin-bottom:4px; }
+    .print-meta{ font-size:12px; color:#475569; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+    <h1>Memo＋（改ざん検知・鍵付き）</h1>
+    <div class="top-actions noprint">
+      <div class="view-toggle">
+        <button id="btnViewList" class="active">一覧</button>
+        <button id="btnViewCal">カレンダー</button>
+      </div>
+      <button class="btn-outline" id="btnPrintConsult">相談用PDF</button>
+      <button class="btn-outline" id="btnExport">エクスポート</button>
+      <label class="btn-outline" style="display:inline-block; padding:8px 12px; cursor:pointer;">
+        インポート<input id="fileImport" type="file" accept="application/json" style="display:none">
+      </label>
+      <button id="themeToggle" class="theme-toggle" title="外観を切替">外観：エレガント</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- 注意書き -->
+  <div id="notice" class="notice noprint">
+    <strong>ご利用前にお読みください</strong><br>
+    本アプリは<b>端末内のブラウザに暗号化保存</b>します。サーバーには一切送信されません。<br>
+    端末やブラウザを変えるとデータは引き継がれません（<b>エクスポート/インポートで移行</b>できます）。<br>
+    パスワードを忘れると復元はできません。<br>
+    <small>※この案内は「×」で閉じられます（今後は表示しません）。</small>
+    <div style="text-align:right; margin-top:6px;">
+      <button id="noticeClose" class="btn-outline" style="padding:6px 10px;">× 閉じる</button>
+    </div>
+  </div>
+
+  <!-- 印刷用ヘッダー（印刷時のみ表示） -->
+  <div id="printHeader" class="print-only">
+    <div class="print-title">記録一覧（相談用）</div>
+    <div class="print-meta" id="printMeta"></div>
+  </div>
+
+  <div class="row">
+    <!-- 左：入力・ロック（印刷対象外にするため noprint） -->
+    <section class="card noprint">
+      <h2 style="margin:0 0 6px">📝 新規記録</h2>
+      <div class="muted">保存時にJSTタイムスタンプを自動付与します。</div>
+      <label>タイトル（任意）</label>
+      <input id="title" placeholder="例：講習と言って外出 / 支出メモ / 会話の要点 など">
+      <label>カテゴリー</label>
+      <select id="cat">
+        <option>観察</option><option>発言</option><option>場所</option><option>支出</option><option>その他</option>
+        <option>経済的準備</option><option>子どもの様子</option><option>法的手続き</option><option>心の状態</option>
+      </select>
+      <label>本文</label>
+      <textarea id="note" placeholder="例：2025/03/12 18:42 自宅を出発。コンビニで◯◯を購入（レシート添付）。その後◯◯方面へ。帰宅は21:05。会話の要点：……"></textarea>
+      <label>画像（任意・PNG/JPEG・5MB以下）</label>
+      <input id="img" type="file" accept="image/png,image/jpeg">
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button class="btn" id="btnAdd">今すぐ記録</button>
+        <span class="muted" id="msg"></span>
+      </div>
+      <hr style="margin:16px -16px; border:none; border-top:1px solid var(--border)">
+      <h2 style="margin:0 0 6px">🔐 ロック設定</h2>
+      <div id="lockPanel"></div>
+    </section>
+
+    <!-- 右：ビュー -->
+    <section class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <h2 style="margin:0" id="viewTitle">📚 記録一覧（最新が下）</h2>
+        <span class="muted">合計 <span id="count">0</span> 件</span>
+      </div>
+      <div id="chainBadge" style="margin:6px 0 12px;"></div>
+
+      <!-- 一覧 -->
+      <ul id="list"></ul>
+
+      <!-- カレンダー -->
+      <div id="calendar" style="display:none;">
+        <div class="cal-head">
+          <button class="btn-outline" id="calPrev">〈 前の月</button>
+          <div id="calYM" style="font-weight:700;"></div>
+          <button class="btn-outline" id="calNext">次の月 〉</button>
+        </div>
+        <div class="cal-grid" id="calDow">
+          <div class="cal-dow">日</div><div class="cal-dow">月</div><div class="cal-dow">火</div><div class="cal-dow">水</div><div class="cal-dow">木</div><div class="cal-dow">金</div><div class="cal-dow">土</div>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+/* ==== 基本 ==== */
+const enc = new TextEncoder(); const dec = new TextDecoder();
+const b64enc = b => btoa(String.fromCharCode(...b));
+const b64dec = s => new Uint8Array(atob(s).split("").map(c=>c.charCodeAt(0)));
+const toHex = buf => Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+const jpTime = d => new Date(d).toLocaleString("ja-JP",{ timeZone:"Asia/Tokyo", hour12:false });
+const jpDate = d => new Date(d).toLocaleDateString("ja-JP",{ timeZone:"Asia/Tokyo" });
+const uuid = () => { const a=crypto.getRandomValues(new Uint8Array(16)); a[6]=(a[6]&0x0f)|0x40; a[8]=(a[8]&0x3f)|0x80;
+  return [...a].map((b,i)=>(i===4||i===6||i===8||i===10?"-":"")+b.toString(16).padStart(2,"0")).join(""); };
+const sha256Hex = async (text) => toHex(await crypto.subtle.digest("SHA-256", enc.encode(text)));
+function hexToBuf(h){ const a=(h.match(/.{1,2}/g)||[]).map(x=>parseInt(x,16)); return new Uint8Array(a); }
+
+/* ==== 暗号化/HMAC ==== */
+async function deriveKey(pw, salt){
+  const km = await crypto.subtle.importKey("raw", enc.encode(pw), {name:"PBKDF2"}, false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2", salt, iterations:120000, hash:"SHA-256"}, km, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
+}
+async function deriveHmac(pw, salt){
+  const km = await crypto.subtle.importKey("raw", enc.encode(pw), {name:"PBKDF2"}, false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2", salt, iterations:120000, hash:"SHA-256"}, km, {name:"HMAC", hash:"SHA-256", length:256}, false, ["sign","verify"]);
+}
+async function encryptJson(obj, pw){
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv   = crypto.getRandomValues(new Uint8Array(12));
+  const key  = await deriveKey(pw, salt);
+  const ct   = await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, enc.encode(JSON.stringify(obj)));
+  return { salt:b64enc(salt), iv:b64enc(iv), data:b64enc(new Uint8Array(ct)) };
+}
+async function decryptJson(payload, pw){
+  const key = await deriveKey(pw, b64dec(payload.salt));
+  const pt  = await crypto.subtle.decrypt({name:"AES-GCM", iv:b64dec(payload.iv)}, key, b64dec(payload.data));
+  return JSON.parse(dec.decode(new Uint8Array(pt)));
+}
+
+/* ==== ストア ==== */
+const LS_ENC="memo_plus_encrypted_v1"; const LS_PLAIN="memo_plus_plain_v1";
+let password=""; let store=null; let viewMode="list"; let calCursor=new Date();
+function emptyStore(){
+  return { version:1, requiresPassword:false, hmacSaltB64:b64enc(crypto.getRandomValues(new Uint8Array(16))), entries:[], images:{} };
+}
+function entryMaterial(e){ return [e.id,e.createdAt,e.sealedAt??"",e.title,e.category,e.note,(e.imageId||"")].join("|"); }
+async function computeEntryHash(e, prev){ return sha256Hex(prev+"|"+entryMaterial(e)); }
+async function load(){
+  const th = localStorage.getItem("memo_plus_theme") || "elegant";
+  document.documentElement.setAttribute("data-theme", th);
+  document.getElementById("themeToggle").textContent = th==="simple" ? "外観：シンプル" : "外観：エレガント";
+  if (localStorage.getItem("memo_plus_notice_closed")==="1"){ document.getElementById("notice").style.display="none"; }
+  const encPayload = localStorage.getItem(LS_ENC);
+  if (encPayload){ store=null; } else { const plain=localStorage.getItem(LS_PLAIN); store=plain?JSON.parse(plain):emptyStore(); }
+  render();
+}
+async function persist(next){
+  if (next.requiresPassword){
+    if (!password){ setMsg("パスワード未入力のため保存できません。先にロック設定で設定してください。"); return; }
+    const encObj = await encryptJson(next, password);
+    localStorage.removeItem(LS_PLAIN);
+    localStorage.setItem(LS_ENC, JSON.stringify(encObj));
+  } else {
+    localStorage.removeItem(LS_ENC);
+    localStorage.setItem(LS_PLAIN, JSON.stringify(next));
+  }
+  store=next; render();
+}
+
+/* ==== UI参照 ==== */
+const el=id=>document.getElementById(id);
+const $title=el("title"), $cat=el("cat"), $note=el("note"), $img=el("img");
+const $list=el("list"), $count=el("count"), $badge=el("chainBadge"), $msg=el("msg");
+const $viewTitle=el("viewTitle");
+
+/* ==== ロック ==== */
+function setMsg(t){ $msg.textContent=t||""; }
+function renderLock(){
+  const p=el("lockPanel"); p.innerHTML="";
+  if (store===null){
+    const w=document.createElement("div");
+    w.innerHTML=`<div class="muted">暗号化データがあります。パスワードで解錠してください。</div>
+      <label>パスワード</label><input id="pwIn" type="password" placeholder="••••••••">
+      <button class="btn" id="btnUnlock" style="margin-top:8px">解錠する</button>
+      <div class="muted" style="margin-top:8px">※ 忘れると復元できません。</div>`;
+    p.appendChild(w);
+    el("btnUnlock").onclick=async()=>{
+      try{ const payload=JSON.parse(localStorage.getItem(LS_ENC));
+        const data=await decryptJson(payload, el("pwIn").value);
+        password=el("pwIn").value; store=data; render();
+      }catch{ setMsg("パスワードが違う可能性があります"); }
+    };
+    return;
+  }
+  if (!store.requiresPassword){
+    const w=document.createElement("div");
+    w.innerHTML=`<div class="muted">現在：<b>パスワード未設定</b>（平文保存）</div>
+      <label>新しいパスワード</label><input id="pw1" type="password">
+      <label>確認用パスワード</label><input id="pw2" type="password">
+      <button class="btn" id="btnSetPw" style="margin-top:8px">パスワードを設定して暗号化保存に切替</button>`;
+    p.appendChild(w);
+    el("btnSetPw").onclick=async()=>{
+      const a=el("pw1").value,b=el("pw2").value; if(!a||a!==b){ setMsg("パスワードが一致しません"); return; }
+      password=a; await persist({ ...(store||emptyStore()), requiresPassword:true });
+      setMsg("暗号化しました。以後は解錠が必要です。");
+    };
+  }else{
+    const w=document.createElement("div");
+    w.innerHTML=`<div class="muted">現在：<b>暗号化保存</b>（AES-GCM）</div>
+      <button class="btn-outline" id="btnLock" style="margin-top:8px">今すぐ画面をロック</button>`;
+    p.appendChild(w);
+    el("btnLock").onclick=()=>{ store=null; render(); };
+  }
+}
+
+/* ==== チェーン検証 ==== */
+async function verifyChain(){
+  if (!store) return {ok:true};
+  let prev="GENESIS"; const salt=b64dec(store.hmacSaltB64);
+  for (let i=0;i<store.entries.length;i++){
+    const e=store.entries[i]; const expected=await computeEntryHash(e, prev);
+    if (expected!==e.hash) return {ok:false, idx:i, reason:"ハッシュ不一致（改ざんの可能性）"};
+    if (store.requiresPassword && e.hmac){
+      const mat=enc.encode(prev+"|"+entryMaterial(e));
+      const key=await deriveHmac(password, salt);
+      const ok=await crypto.subtle.verify("HMAC", key, hexToBuf(e.hmac), mat);
+      if (!ok) return {ok:false, idx:i, reason:"署名検証失敗（改ざんの可能性）"};
+    }
+    prev=e.hash;
+  }
+  return {ok:true};
+}
+
+/* ==== CRUD ==== */
+async function addEntry(){
+  if (store===null){ setMsg("まずパスワードを入れて解錠してください"); return; }
+  const title=$title.value.trim(), cat=$cat.value, note=$note.value.trim();
+  let imageId=null; const f=$img.files[0];
+  if (!title && !note && !f){ setMsg("内容を入力してください"); return; }
+  if (f){
+    if (!/image\/(png|jpeg)/.test(f.type)) { setMsg("PNG/JPEGのみ許可"); return; }
+    if (f.size>5*1024*1024){ setMsg("画像は5MB以下にしてください"); return; }
+    const dataURL=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); });
+    imageId=uuid(); store.images[imageId]=dataURL;
+  }
+  const now=new Date().toISOString();
+  const prev=store.entries[store.entries.length-1]?.hash ?? "GENESIS";
+  const draft={ id:uuid(), createdAt:now, sealedAt:null, title, category:cat, note, imageId, prevHash:prev, hash:"", hmac:null };
+  draft.hash=await computeEntryHash(draft, prev);
+  if (store.requiresPassword){
+    const mat=enc.encode(prev+"|"+entryMaterial(draft));
+    const key=await deriveHmac(password, b64dec(store.hmacSaltB64));
+    const sig=await crypto.subtle.sign("HMAC", key, mat);
+    draft.hmac=toHex(sig);
+  }
+  await persist({ ...store, entries:[...store.entries, draft] });
+  $title.value=""; $note.value=""; $img.value=""; setMsg("保存しました");
+}
+async function editEntry(id, fields){
+  const idx=store.entries.findIndex(e=>e.id===id); if (idx<0) return;
+  const t=store.entries[idx]; if (t.sealedAt){ setMsg("封印済みは編集できません"); return; }
+  const arr=[...store.entries]; arr[idx]={ ...t, ...fields };
+  let prev="GENESIS";
+  for (let i=0;i<arr.length;i++){
+    arr[i].prevHash=prev; arr[i].hash=await computeEntryHash(arr[i], prev);
+    if (store.requiresPassword){
+      const key=await deriveHmac(password, b64dec(store.hmacSaltB64));
+      const sig=await crypto.subtle.sign("HMAC", key, enc.encode(prev+"|"+entryMaterial(arr[i])));
+      arr[i].hmac=toHex(sig);
+    } else arr[i].hmac=null;
+    prev=arr[i].hash;
+  }
+  await persist({ ...store, entries:arr });
+}
+async function sealEntry(id){
+  const idx=store.entries.findIndex(e=>e.id===id); if (idx<0) return;
+  if (store.entries[idx].sealedAt) return;
+  const arr=[...store.entries]; arr[idx]={ ...store.entries[idx], sealedAt:new Date().toISOString() };
+  let prev=idx===0 ? "GENESIS" : arr[idx-1].hash;
+  for (let i=idx;i<arr.length;i++){
+    arr[i].prevHash=prev; arr[i].hash=await computeEntryHash(arr[i], prev);
+    if (store.requiresPassword){
+      const key=await deriveHmac(password, b64dec(store.hmacSaltB64));
+      const sig=await crypto.subtle.sign("HMAC", key, enc.encode(prev+"|"+entryMaterial(arr[i])));
+      arr[i].hmac=toHex(sig);
+    } else arr[i].hmac=null;
+    prev=arr[i].hash;
+  }
+  await persist({ ...store, entries:arr });
+}
+async function removeEntry(id){
+  const idx=store.entries.findIndex(e=>e.id===id); if (idx<0) return;
+  if (store.entries[idx].sealedAt){ setMsg("封印済みは削除できません"); return; }
+  const arr=store.entries.filter(e=>e.id!==id);
+  let prev="GENESIS";
+  for (let i=0;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash=await computeEntryHash(arr[i], prev); prev=arr[i].hash; }
+  await persist({ ...store, entries:arr });
+}
+
+/* ==== 印刷用メタ情報 ==== */
+function computeRange(){
+  if (!store || !store.entries.length) return { from:"—", to:"—" };
+  const sorted=[...store.entries].sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
+  return { from: jpDate(sorted[0].createdAt), to: jpDate(sorted[sorted.length-1].createdAt) };
+}
+function preparePrintHeader(){
+  const {from,to}=computeRange();
+  const meta = `印刷日：${jpDate(new Date())}　記録件数：${store?store.entries.length:0}　期間：${from} 〜 ${to}`;
+  document.getElementById("printMeta").textContent = meta;
+}
+
+/* ==== 一覧描画 ==== */
+async function renderList(){
+  const $list=el("list"); $list.innerHTML="";
+  if (!store){ el("count").textContent="0"; el("chainBadge").innerHTML=""; return; }
+  el("count").textContent=store.entries.length;
+  const vr=await verifyChain();
+  el("chainBadge").innerHTML = vr.ok ? `<span class="chip good">改ざん検知: 異常なし</span>`
+                                     : `<span class="chip bad">チェーン破損: #${vr.idx+1} ${vr.reason}</span>`;
+  for (const e of store.entries){
+    const li=document.createElement("li"); li.className="item";
+    const header=document.createElement("div");
+    header.innerHTML=`<div class="meta">作成: ${jpTime(e.createdAt)}${e.sealedAt?` ／ 封印: ${jpTime(e.sealedAt)}`:""}</div>
+                      <div class="chip">${e.category}</div>`;
+    const title=document.createElement("div"); title.style.fontWeight="600"; title.style.marginTop="6px"; title.textContent=e.title||"（無題）";
+    const note=document.createElement("div"); note.style.whiteSpace="pre-wrap"; note.style.marginTop="6px"; note.textContent=e.note||"";
+    li.appendChild(header); li.appendChild(title);
+    if (e.imageId && store.images[e.imageId]){ const img=document.createElement("img"); img.src=store.images[e.imageId]; img.className="preview"; li.appendChild(img); }
+    li.appendChild(note);
+
+    const ops=document.createElement("div");
+    ops.className="noprint";   /* ← 印刷で隠す */
+    ops.style.display="flex"; ops.style.gap="8px"; ops.style.marginTop="8px";
+    if (!e.sealedAt){
+      const bEdit=document.createElement("button"); bEdit.className="btn-outline"; bEdit.textContent="編集";
+      bEdit.onclick=async()=>{ const t=prompt("タイトルを編集", e.title||""); if(t===null)return; const n=prompt("本文を編集", e.note||""); if(n===null)return; await editEntry(e.id,{title:t,note:n}); };
+      const bDel=document.createElement("button"); bDel.className="btn-outline"; bDel.textContent="削除";
+      bDel.onclick=()=>{ if(confirm("削除しますか？")) removeEntry(e.id); };
+      const bSeal=document.createElement("button"); bSeal.className="btn-seal"; bSeal.textContent="封印（確定）"; bSeal.onclick=()=>sealEntry(e.id);
+      ops.append(bEdit,bDel,bSeal);
+    }else{
+      const s=document.createElement("span"); s.className="chip good"; s.textContent="封印済み・編集不可"; ops.appendChild(s);
+    }
+    li.appendChild(ops);
+
+    const dbg=document.createElement("div");
+    dbg.className="meta noprint";   /* ← 印刷で隠す（ハッシュ行） */
+    dbg.style.marginTop="6px";
+    dbg.textContent=`prev:${e.prevHash.slice(0,16)}…  hash:${e.hash.slice(0,16)}…${e.hmac?`  hmac:${e.hmac.slice(0,16)}…`:""}`;
+    li.appendChild(dbg);
+
+    $list.appendChild(li);
+  }
+}
+
+/* ==== カレンダー描画 ==== */
+function ymdKey(d){ return new Date(d).toLocaleDateString("ja-JP",{ timeZone:"Asia/Tokyo", year:"numeric", month:"2-digit", day:"2-digit"}); }
+function monthMeta(date){ const y=date.getFullYear(), m=date.getMonth(); const first=new Date(y,m,1); const firstDow=(first.getDay()+7)%7; const daysInMonth=new Date(y,m+1,0).getDate(); const prevDays=new Date(y,m,0).getDate(); return {y,m,firstDow,daysInMonth,prevDays}; }
+function groupByDate(entries){ const map={}; for(const e of entries){ const k=ymdKey(e.createdAt); (map[k] ||= []).push(e); } return map; }
+function renderCalendar(){
+  const grid=el("calGrid"), ymEl=el("calYM"); grid.innerHTML="";
+  if (!store){ ymEl.textContent=""; return; }
+  const meta=monthMeta(calCursor); ymEl.textContent=`${meta.y}年 ${meta.m+1}月`;
+  const grouped=groupByDate(store.entries);
+  const cells=[]; for(let i=0;i<meta.firstDow;i++){ const d=meta.prevDays-(meta.firstDow-1-i); cells.push({dim:true,date:new Date(meta.y,meta.m-1,d)}); }
+  for(let d=1; d<=meta.daysInMonth; d++){ cells.push({dim:false,date:new Date(meta.y,meta.m,d)}); }
+  while(cells.length%7!==0) cells.push({dim:true,date:new Date(meta.y,meta.m+1,cells.length)});
+  for(const c of cells){
+    const cell=document.createElement("div"); cell.className="cal-cell"+(c.dim?" dim":"");
+    const key=ymdKey(c.date); const y=c.date.getFullYear(), m=c.date.getMonth()+1, d=c.date.getDate();
+    const head=document.createElement("div"); head.className="cal-date"; head.innerHTML=`<span>${m}/${d}</span>${grouped[key]?`<span class="dot"></span>`:""}`; cell.appendChild(head);
+    if(grouped[key]){
+      const badges=document.createElement("div"); badges.className="cal-badges";
+      const cats=new Set(grouped[key].map(e=>e.category)); for(const cat of cats){ const b=document.createElement("span"); b.className="badge"; b.textContent=cat; badges.appendChild(b); }
+      cell.appendChild(badges);
+      const list=document.createElement("div"); list.className="cal-list";
+      for(const e of grouped[key].slice(0,4)){ const div=document.createElement("div"); div.className="cal-evt"; div.title=e.title||e.note||""; div.textContent=(e.title||e.note||"（無題）"); list.appendChild(div); }
+      if(grouped[key].length>4){ const more=document.createElement("div"); more.className="cal-evt"; more.textContent=`…他 ${grouped[key].length-4} 件`; list.appendChild(more); }
+      cell.onclick=()=>{ viewMode="list"; switchView(); store.entries.sort((a,b)=> (ymdKey(b.createdAt)===key)-(ymdKey(a.createdAt)===key) || a.createdAt.localeCompare(b.createdAt) ); render(); window.scrollTo({top:0,behavior:"smooth"}); };
+      cell.appendChild(list);
+    }
+    grid.appendChild(cell);
+  }
+}
+
+/* ==== ビュー切替 ==== */
+function switchView(){
+  if (viewMode==="list"){
+    $viewTitle.textContent="📚 記録一覧（最新が下）";
+    el("list").style.display=""; el("calendar").style.display="none";
+    el("btnViewList").classList.add("active"); el("btnViewCal").classList.remove("active");
+  }else{
+    $viewTitle.textContent="📅 カレンダー";
+    el("list").style.display="none"; el("calendar").style.display="";
+    el("btnViewCal").classList.add("active"); el("btnViewList").classList.remove("active");
+  }
+}
+function render(){ renderLock(); switchView(); renderList(); if(viewMode==="cal") renderCalendar(); }
+
+/* ==== イベント ==== */
+el("btnAdd").onclick=addEntry;
+el("btnExport").onclick=()=>{
+  if(!store){ setMsg("解錠してからエクスポートしてください"); return; }
+  const blob=new Blob([JSON.stringify(store,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob); const a=document.createElement("a");
+  a.href=url; a.download=`memo-plus-${new Date().toISOString().replace(/[:.]/g,"-")}.json`; a.click(); URL.revokeObjectURL(url);
+};
+el("fileImport").onchange=(e)=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=async()=>{ try{ const obj=JSON.parse(r.result); if(typeof obj.version!=="number"||!Array.isArray(obj.entries)) throw 0; await persist(obj); setMsg("インポートしました"); }catch{ setMsg("インポート失敗"); } }; r.readAsText(f); };
+el("btnViewList").onclick=()=>{ viewMode="list"; switchView(); renderList(); };
+el("btnViewCal").onclick =()=>{ viewMode="cal";  switchView(); renderCalendar(); };
+el("calPrev").onclick=()=>{ calCursor=new Date(calCursor.getFullYear(), calCursor.getMonth()-1, 1); renderCalendar(); };
+el("calNext").onclick=()=>{ calCursor=new Date(calCursor.getFullYear(), calCursor.getMonth()+1, 1); renderCalendar(); };
+el("themeToggle").onclick=()=>{
+  const cur=document.documentElement.getAttribute("data-theme");
+  const next=cur==="simple" ? "elegant" : "simple";
+  document.documentElement.setAttribute("data-theme", next);
+  el("themeToggle").textContent = next==="simple" ? "外観：シンプル" : "外観：エレガント";
+  localStorage.setItem("memo_plus_theme", next);
+};
+el("noticeClose").onclick=()=>{ el("notice").style.display="none"; localStorage.setItem("memo_plus_notice_closed","1"); };
+
+/* 相談用PDF：記録だけ印刷（現在のビューを出力） */
+el("btnPrintConsult").onclick=()=>{
+  preparePrintHeader();
+  window.print();
+};
+
+/* ==== 起動 ==== */
+load();
+</script>
+</body>
+</html>

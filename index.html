@@ -69,6 +69,14 @@
 
   /* 印刷用ヘッダー（普段は非表示） */
   .print-only{ display:none; }
+
+  /* 初回パスワード設定ゲート（強制） */
+  .gate{
+    position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(248,250,252,.9); backdrop-filter: blur(6px); z-index:50;
+  }
+  .gate .panel{ max-width:420px; width:92%; background:#fff; border:1px solid var(--border); border-radius:16px; padding:18px; }
+
   @media (max-width: 980px){ .row{ grid-template-columns:1fr; } }
 
   /* ---- 印刷調整：相談用（記録だけ） ---- */
@@ -190,8 +198,28 @@
   </div>
 </main>
 
+<!-- 初回パスワード設定の全画面ゲート -->
+<div id="gate" class="gate">
+  <div class="panel">
+    <h3 style="margin:0 0 8px">🔐 初回設定：パスワードの登録</h3>
+    <p class="muted" style="margin: 6px 0 12px">
+      本アプリは起動のたびにロックされます。利用開始にはパスワード設定が必要です（忘れると復元できません）。
+    </p>
+    <label>新しいパスワード</label>
+    <input id="gpw1" type="password" placeholder="••••••••">
+    <label>確認用パスワード</label>
+    <input id="gpw2" type="password" placeholder="••••••••">
+    <button id="gSet" class="btn" style="margin-top:10px; width:100%">設定して開始する</button>
+    <div id="gmsg" class="muted" style="margin-top:8px"></div>
+  </div>
+</div>
+
 <script>
-/* ==== 基本 ==== */
+/* ==== 基本設定 ==== */
+const FORCE_LOCK = true;        // ← 起動のたび必ずロック（初回は設定を強制）
+const IDLE_MINUTES = 5;         // ← 自動ロック（無操作で分）
+let idleTimer = null;
+
 const enc = new TextEncoder(); const dec = new TextDecoder();
 const b64enc = b => btoa(String.fromCharCode(...b));
 const b64dec = s => new Uint8Array(atob(s).split("").map(c=>c.charCodeAt(0)));
@@ -234,6 +262,7 @@ function emptyStore(){
 function entryMaterial(e){ return [e.id,e.createdAt,e.sealedAt??"",e.title,e.category,e.note,(e.imageId||""),(e.mood||"")].join("|"); }
 async function computeEntryHash(e, prev){ return sha256Hex(prev+"|"+entryMaterial(e)); }
 
+/* ==== 起動 ==== */
 async function load(){
   // テーマ復元
   const th = localStorage.getItem("memo_plus_theme") || "elegant";
@@ -242,10 +271,15 @@ async function load(){
   // 注意書き表示制御
   if (localStorage.getItem("memo_plus_notice_closed")==="1"){ document.getElementById("notice").style.display="none"; }
 
+  // 暗号化データがある場合は必ずロック画面から開始
   const encPayload = localStorage.getItem(LS_ENC);
-  if (encPayload){ store=null; } else { const plain=localStorage.getItem(LS_PLAIN); store=plain?JSON.parse(plain):emptyStore(); }
+  if (encPayload){ store=null; } 
+  else { const plain=localStorage.getItem(LS_PLAIN); store=plain?JSON.parse(plain):emptyStore(); }
+
   render();
 }
+
+/* ==== 保存 ==== */
 async function persist(next){
   if (next.requiresPassword){
     if (!password){ setMsg("パスワード未入力のため保存できません。先にロック設定で設定してください。"); return; }
@@ -272,24 +306,51 @@ $moodPick.querySelectorAll(".mood-btn").forEach(btn=>{
   btn.onclick = ()=>{
     $moodPick.querySelectorAll(".mood-btn").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
-    currentMood = btn.dataset.mood; // "happy" | "neutral" | "sad" | "angry" | "tired"
+    currentMood = btn.dataset.mood;
   };
 });
 function mindMessage(mood){
-  switch(mood){
-    case "happy":  return "前向きに過ごせた日、えらい！その感覚を大切に😊";
-    case "neutral":return "淡々と積み上げられたね。続ける力は強い味方です。";
-    case "sad":    return "しんどい日も記録に残せた。まずは自分をいたわろう🥲";
-    case "angry":  return "怒りは境界線のサイン。深呼吸、そして事実を残せたの立派🔥";
-    case "tired":  return "おつかれさま。休む勇気も大事。今日は早めに休もう😴";
-    default:       return "記録してくれてありがとう。小さな一歩が積み重なっていきます。";
-  }
+  const list = {
+    happy: [
+      "前向きに過ごせた日、えらい！その感覚を大切に😊",
+      "小さな喜びを見つけられたね、素敵！",
+      "よく眠ってよく笑って、心の体力が増えてるよ🌿"
+    ],
+    neutral: [
+      "淡々と積み上げられたね。続ける力は強い味方です。",
+      "普通でOK、普通がいちばんの土台👏",
+      "静かな一日も前進。積み重ねが効いてくるよ。"
+    ],
+    sad: [
+      "しんどい日も記録に残せた。まずは自分をいたわろう🥲",
+      "涙は弱さじゃなく回復の合図。今日はやさしく過ごそう。",
+      "ここに書けたなら半分は整理できてる。大丈夫。"
+    ],
+    angry: [
+      "怒りは境界線のサイン。深呼吸、事実を残せたの立派🔥",
+      "イヤだったね。嫌だと言葉にできた自分を守れたね。",
+      "怒りの熱はパワーに変わる。焦らずいこう。"
+    ],
+    tired: [
+      "おつかれさま。休む勇気も大事。今日は早めに休もう😴",
+      "がんばったね。水を飲んで目を閉じて、深呼吸。",
+      "体力は有限。やるべきは“休む”ことだけでいい日もある。"
+    ],
+    default: [
+      "記録してくれてありがとう。小さな一歩が積み重なっていきます。",
+      "未来の自分を助けるメモが増えたよ、すごい！",
+      "たとえ短くても“残す”がいちばん大事。"
+    ]
+  };
+  const arr = list[mood] || list.default;
+  return arr[Math.floor(Math.random()*arr.length)];
 }
 
-/* ==== ロック ==== */
+/* ==== ロック関連 ==== */
 function setMsg(t){ $msg.textContent=t||""; }
 function renderLock(){
   const p=el("lockPanel"); p.innerHTML="";
+  // 暗号化データがある＝ロックから開始
   if (store===null){
     const w=document.createElement("div");
     w.innerHTML=`<div class="muted">暗号化データがあります。パスワードで解錠してください。</div>
@@ -305,6 +366,8 @@ function renderLock(){
     };
     return;
   }
+
+  // 通常のロック設定UI（参考）
   if (!store.requiresPassword){
     const w=document.createElement("div");
     w.innerHTML=`<div class="muted">現在：<b>パスワード未設定</b>（平文保存）</div>
@@ -322,8 +385,28 @@ function renderLock(){
     w.innerHTML=`<div class="muted">現在：<b>暗号化保存</b>（AES-GCM）</div>
       <button class="btn-outline" id="btnLock" style="margin-top:8px">今すぐ画面をロック</button>`;
     p.appendChild(w);
-    el("btnLock").onclick=()=>{ store=null; render(); };
+    el("btnLock").onclick=()=>{ lockNow(); };
   }
+}
+
+/* 初回パスワード設定の全画面ゲート */
+function needGate(){ return FORCE_LOCK && store && !store.requiresPassword; }
+function showGate(show){
+  const g = document.getElementById("gate");
+  g.style.display = show ? "flex" : "none";
+}
+function bindGate(){
+  const btn = document.getElementById("gSet");
+  btn.onclick = async ()=>{
+    const a = document.getElementById("gpw1").value;
+    const b = document.getElementById("gpw2").value;
+    const gmsg = document.getElementById("gmsg");
+    if (!a || a!==b){ gmsg.textContent="パスワードが一致しません"; return; }
+    password = a;
+    await persist({ ...(store||emptyStore()), requiresPassword:true });
+    showGate(false);
+    setMsg("暗号化しました。以後は解錠が必要です。");
+  };
 }
 
 /* ==== チェーン検証 ==== */
@@ -347,6 +430,8 @@ async function verifyChain(){
 /* ==== CRUD ==== */
 async function addEntry(){
   if (store===null){ setMsg("まずパスワードを入れて解錠してください"); return; }
+  if (!store.requiresPassword && FORCE_LOCK){ setMsg("まずロック設定でパスワードを設定してください"); showGate(true); return; }
+
   const title=$title.value.trim(), cat=$cat.value, note=$note.value.trim();
   let imageId=null; const f=$img.files[0];
   if (!title && !note && !f){ setMsg("内容を入力してください"); return; }
@@ -373,6 +458,7 @@ async function addEntry(){
   setMsg(mindMessage(draft.mood));
 }
 async function editEntry(id, fields){
+  if (!store?.requiresPassword && FORCE_LOCK){ setMsg("まずロック設定でパスワードを設定してください"); showGate(true); return; }
   const idx=store.entries.findIndex(e=>e.id===id); if (idx<0) return;
   const t=store.entries[idx]; if (t.sealedAt){ setMsg("封印済みは編集できません"); return; }
   const arr=[...store.entries]; arr[idx]={ ...t, ...fields };
@@ -389,6 +475,7 @@ async function editEntry(id, fields){
   await persist({ ...store, entries:arr });
 }
 async function sealEntry(id){
+  if (!store?.requiresPassword && FORCE_LOCK){ setMsg("まずロック設定でパスワードを設定してください"); showGate(true); return; }
   const idx=store.entries.findIndex(e=>e.id===id); if (idx<0) return;
   if (store.entries[idx].sealedAt) return;
   const arr=[...store.entries]; arr[idx]={ ...store.entries[idx], sealedAt:new Date().toISOString() };
@@ -405,6 +492,7 @@ async function sealEntry(id){
   await persist({ ...store, entries:arr });
 }
 async function removeEntry(id){
+  if (!store?.requiresPassword && FORCE_LOCK){ setMsg("まずロック設定でパスワードを設定してください"); showGate(true); return; }
   const idx=store.entries.findIndex(e=>e.id===id); if (idx<0) return;
   if (store.entries[idx].sealedAt){ setMsg("封印済みは削除できません"); return; }
   const arr=store.entries.filter(e=>e.id!==id);
@@ -455,7 +543,7 @@ async function renderList(){
     li.appendChild(note);
 
     const ops=document.createElement("div");
-    ops.className="noprint";   /* 印刷で隠す */
+    ops.className="noprint";
     ops.style.display="flex"; ops.style.gap="8px"; ops.style.marginTop="8px";
     if (!e.sealedAt){
       const bEdit=document.createElement("button"); bEdit.className="btn-outline"; bEdit.textContent="編集";
@@ -470,7 +558,7 @@ async function renderList(){
     li.appendChild(ops);
 
     const dbg=document.createElement("div");
-    dbg.className="meta noprint";   /* 印刷で隠す（ハッシュ行） */
+    dbg.className="meta noprint";
     dbg.style.marginTop="6px";
     dbg.textContent=`prev:${e.prevHash.slice(0,16)}…  hash:${e.hash.slice(0,16)}…${e.hmac?`  hmac:${e.hmac.slice(0,16)}…`:""}`;
     li.appendChild(dbg);
@@ -479,7 +567,7 @@ async function renderList(){
   }
 }
 
-/* ==== カレンダー描画 ==== */
+/* ==== カレンダー ==== */
 function ymdKey(d){ return new Date(d).toLocaleDateString("ja-JP",{ timeZone:"Asia/Tokyo", year:"numeric", month:"2-digit", day:"2-digit"}); }
 function monthMeta(date){ const y=date.getFullYear(), m=date.getMonth(); const first=new Date(y,m,1); const firstDow=(first.getDay()+7)%7; const daysInMonth=new Date(y,m+1,0).getDate(); const prevDays=new Date(y,m,0).getDate(); return {y,m,firstDow,daysInMonth,prevDays}; }
 function groupByDate(entries){ const map={}; for(const e of entries){ const k=ymdKey(e.createdAt); (map[k] ||= []).push(e); } return map; }
@@ -500,7 +588,6 @@ function renderCalendar(){
       const cats=new Set(grouped[key].map(e=>e.category)); for(const cat of cats){ const b=document.createElement("span"); b.className="badge"; b.textContent=cat; badges.appendChild(b); }
       cell.appendChild(badges);
 
-      // ムードの小ドット（最大5）
       const moodRow = document.createElement("div"); moodRow.style.marginTop="2px";
       const mcolor = { happy:"mood-happy", neutral:"mood-neutral", sad:"mood-sad", angry:"mood-angry", tired:"mood-tired" };
       for (const ev of grouped[key].slice(0,5)){
@@ -545,7 +632,6 @@ function renderStats(){
   wrap.innerHTML = "";
   const { weeks, moodCount } = summarize();
 
-  // 週別件数バー
   const maxv = Math.max(1, ...weeks.map(w=>w[1]));
   const W=520,H=160,P=24;
   let bars = "";
@@ -561,7 +647,6 @@ function renderStats(){
   });
   const svgBar = `<svg width="${W}" height="${H}" role="img" aria-label="週別記録数"><rect x="0" y="0" width="${W}" height="${H}" fill="white" stroke="#e5e7eb"/><g>${bars}</g></svg>`;
 
-  // ムード比率リング
   const total = Object.values(moodCount).reduce((a,b)=>a+b,0) || 1;
   const colors = { happy:"#16a34a", neutral:"#0284c7", sad:"#7c3aed", angry:"#dc2626", tired:"#ca8a04" };
   const R=60, CX=90, CY=90, CIRC=2*Math.PI*R;
@@ -597,6 +682,7 @@ function renderStats(){
 }
 
 /* ==== ビュー切替 ==== */
+let viewMode="list";
 function switchView(){
   const vList = el("btnViewList"), vCal = el("btnViewCal"), vStats = el("btnViewStats");
   const list = el("list"), cal = el("calendar"), stats = el("stats");
@@ -607,9 +693,26 @@ function switchView(){
   else if (viewMode==="cal"){ $viewTitle.textContent="📅 カレンダー"; cal.style.display=""; vCal.classList.add("active"); }
   else { $viewTitle.textContent="📈 統計（直近8週）"; stats.style.display=""; vStats.classList.add("active"); }
 }
-function render(){ renderLock(); switchView(); renderList(); if(viewMode==="cal") renderCalendar(); if(viewMode==="stats") renderStats(); }
+function render(){ renderLock(); switchView(); renderList(); if(viewMode==="cal") renderCalendar(); if(viewMode==="stats") renderStats(); renderGateIfNeeded(); }
 
-/* ==== イベント ==== */
+/* ==== 自動ロック ==== */
+function lockNow(){
+  store = null;               // ロック状態へ
+  password = "";              // メモリ上の鍵を消す
+  render();
+}
+function resetIdle(){
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(lockNow, IDLE_MINUTES * 60 * 1000);
+}
+["click","keydown","mousemove","touchstart"].forEach(ev=>{
+  window.addEventListener(ev, resetIdle, {passive:true});
+});
+document.addEventListener("visibilitychange", ()=>{
+  if (document.hidden) lockNow();   // 画面から離れたら即ロック
+});
+
+/* ==== 印刷/各種イベント ==== */
 el("btnAdd").onclick=addEntry;
 el("btnExport").onclick=()=>{
   if(!store){ setMsg("解錠してからエクスポートしてください"); return; }
@@ -635,7 +738,14 @@ el("noticeClose").onclick=()=>{ el("notice").style.display="none"; localStorage.
 /* 相談用PDF：記録だけ印刷（現在のビューを出力） */
 el("btnPrintConsult").onclick=()=>{ preparePrintHeader(); window.print(); };
 
+/* ==== ゲート制御 ==== */
+function renderGateIfNeeded(){
+  bindGate();
+  if (needGate()) showGate(true); else showGate(false);
+}
+
 /* ==== 起動 ==== */
+window.addEventListener('load', ()=>{ resetIdle(); });
 load();
 </script>
 </body>

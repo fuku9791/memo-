@@ -4,8 +4,15 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Memo＋</title>
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+
+<!-- フォント（控えめで読みやすい） -->
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600&display=swap" rel="stylesheet">
+
 <style>
   :root{
     --bg:#f6f7fb; --card:#fff; --ink:#0f172a; --muted:#64748b; --accent:#0ea5e9;
@@ -64,34 +71,27 @@
   .mood-happy{ background:#16a34a; } .mood-neutral{ background:#0284c7; } .mood-sad{ background:#7c3aed; }
   .mood-angry{ background:#dc2626; } .mood-tired{ background:#ca8a04; }
 
-  /* 統計 */
-  #stats .card{ margin-bottom:12px; }
-
-  /* 印刷用ヘッダー（普段は非表示） */
+  /* 印刷時：入力UIは非表示・記録だけ出力 */
   .print-only{ display:none; }
-
-  /* 初回パスワード設定ゲート（強制） */
-  .gate{
-    position:fixed; inset:0; display:none; align-items:center; justify-content:center;
-    background:rgba(248,250,252,.9); backdrop-filter: blur(6px); z-index:50;
-  }
-  .gate .panel{ max-width:420px; width:92%; background:#fff; border:1px solid var(--border); border-radius:16px; padding:18px; }
-
-  @media (max-width: 980px){ .row{ grid-template-columns:1fr; } }
-
-  /* ---- 印刷調整：相談用（記録だけ） ---- */
   @media print{
     header, .noprint, #notice { display: none !important; }
     body { background: #fff; }
     .card { border:0; box-shadow:none; }
     .row { display:block; }
-    .row > .card { width:100%; max-width:100%; }
     .item { break-inside: avoid; page-break-inside: avoid; margin-bottom:12px; }
     img.preview { max-width:100%; height:auto; }
     .print-only{ display:block; margin: 8px 0 12px; }
     .print-title{ font-size:18px; font-weight:700; margin-bottom:4px; }
     .print-meta{ font-size:12px; color:#475569; }
   }
+
+  /* パスワード強制ゲート（スマホでも必ず出る） */
+  .gate{
+    position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(248,250,252,.9); backdrop-filter: blur(6px); z-index:50;
+  }
+  .gate .panel{ max-width:420px; width:92%; background:#fff; border:1px solid var(--border); border-radius:16px; padding:18px; }
+  @media (max-width: 980px){ .row{ grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -115,29 +115,27 @@
 </header>
 
 <main class="wrap">
-  <!-- 注意書き -->
   <div id="notice" class="notice noprint">
     <strong>ご利用前にお読みください</strong><br>
-    本アプリは<b>端末内のブラウザに暗号化保存</b>します。サーバーには一切送信されません。<br>
-    端末やブラウザを変えるとデータは引き継がれません（<b>エクスポート/インポートで移行</b>できます）。<br>
-    パスワードを忘れると復元はできません。<br>
-    <small>※この案内は「×」で閉じられます（今後は表示しません）。</small>
+    本アプリは<b>端末内のブラウザに暗号化保存</b>します。サーバーには保存しません。<br>
+    端末やブラウザを変えるとデータは移行されません（<b>エクスポート/インポート</b>で移せます）。<br>
+    パスワードを忘れると復元できません。
     <div style="text-align:right; margin-top:6px;">
       <button id="noticeClose" class="btn-outline" style="padding:6px 10px;">× 閉じる</button>
     </div>
   </div>
 
-  <!-- 印刷用ヘッダー（印刷時のみ表示） -->
-  <div id="printHeader" class="print-only">
+  <div class="print-only">
     <div class="print-title">記録一覧（相談用）</div>
     <div class="print-meta" id="printMeta"></div>
   </div>
 
   <div class="row">
-    <!-- 左：入力・ロック（印刷対象外にするため noprint） -->
+    <!-- 入力側（印刷除外） -->
     <section class="card noprint">
       <h2 style="margin:0 0 6px">📝 新規記録</h2>
-      <div class="muted">保存時にJSTタイムスタンプを自動付与します。</div>
+      <div class="muted">保存時にJSTタイムスタンプが自動付与。</div>
+
       <label>タイトル（任意）</label>
       <input id="title" placeholder="例：講習と言って外出 / 支出メモ / 会話の要点 など">
       <label>カテゴリー</label>
@@ -147,6 +145,7 @@
       </select>
       <label>本文</label>
       <textarea id="note" placeholder="例：2025/03/12 18:42 自宅を出発。コンビニで◯◯を購入（レシート添付）。その後◯◯方面へ。帰宅は21:05。会話の要点：……"></textarea>
+
       <label>今日の気持ち（任意）</label>
       <div id="moodPick" class="mood-pick">
         <button type="button" class="mood-btn" data-mood="happy">🙂 前向き</button>
@@ -155,18 +154,22 @@
         <button type="button" class="mood-btn" data-mood="angry">😡 いらだち</button>
         <button type="button" class="mood-btn" data-mood="tired">😴 つかれ</button>
       </div>
+
       <label>画像（任意・PNG/JPEG・5MB以下）</label>
       <input id="img" type="file" accept="image/png,image/jpeg">
+
       <div style="display:flex; gap:8px; margin-top:12px;">
         <button class="btn" id="btnAdd">今すぐ記録</button>
         <span class="muted" id="msg"></span>
       </div>
+
       <hr style="margin:16px -16px; border:none; border-top:1px solid var(--border)">
       <h2 style="margin:0 0 6px">🔐 ロック設定</h2>
+      <!-- ★スマホでも必ず出る（JSで常に描画） -->
       <div id="lockPanel"></div>
     </section>
 
-    <!-- 右：ビュー -->
+    <!-- 表示側 -->
     <section class="card">
       <div style="display:flex; justify-content:space-between; align-items:center">
         <h2 style="margin:0" id="viewTitle">📚 記録一覧（最新が下）</h2>
@@ -174,7 +177,6 @@
       </div>
       <div id="chainBadge" style="margin:6px 0 12px;"></div>
 
-      <!-- 一覧 -->
       <ul id="list"></ul>
 
       <!-- カレンダー -->
@@ -185,7 +187,8 @@
           <button class="btn-outline" id="calNext">次の月 〉</button>
         </div>
         <div class="cal-grid" id="calDow">
-          <div class="cal-dow">日</div><div class="cal-dow">月</div><div class="cal-dow">火</div><div class="cal-dow">水</div><div class="cal-dow">木</div><div class="cal-dow">金</div><div class="cal-dow">土</div>
+          <div class="cal-dow">日</div><div class="cal-dow">月</div><div class="cal-dow">火</div>
+          <div class="cal-dow">水</div><div class="cal-dow">木</div><div class="cal-dow">金</div><div class="cal-dow">土</div>
         </div>
         <div class="cal-grid" id="calGrid"></div>
       </div>
@@ -198,7 +201,7 @@
   </div>
 </main>
 
-<!-- 初回パスワード設定の全画面ゲート -->
+<!-- 初回パスワード設定ゲート（常に表示可能・スマホOK） -->
 <div id="gate" class="gate">
   <div class="panel">
     <h3 style="margin:0 0 8px">🔐 初回設定：パスワードの登録</h3>
@@ -215,9 +218,9 @@
 </div>
 
 <script>
-/* ==== 基本設定 ==== */
-const FORCE_LOCK = true;        // ← 起動のたび必ずロック（初回は設定を強制）
-const IDLE_MINUTES = 5;         // ← 自動ロック（無操作で分）
+/* ========= 設定 ========= */
+const FORCE_LOCK = true;        // 起動ごとにロック
+const IDLE_MINUTES = 5;         // 自動ロック分
 let idleTimer = null;
 
 const enc = new TextEncoder(); const dec = new TextDecoder();
@@ -231,7 +234,7 @@ const uuid = () => { const a=crypto.getRandomValues(new Uint8Array(16)); a[6]=(a
 const sha256Hex = async (text) => toHex(await crypto.subtle.digest("SHA-256", enc.encode(text)));
 function hexToBuf(h){ const a=(h.match(/.{1,2}/g)||[]).map(x=>parseInt(x,16)); return new Uint8Array(a); }
 
-/* ==== 暗号化/HMAC ==== */
+/* ========= 暗号化/HMAC ========= */
 async function deriveKey(pw, salt){
   const km = await crypto.subtle.importKey("raw", enc.encode(pw), {name:"PBKDF2"}, false, ["deriveKey"]);
   return crypto.subtle.deriveKey({name:"PBKDF2", salt, iterations:120000, hash:"SHA-256"}, km, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
@@ -253,33 +256,26 @@ async function decryptJson(payload, pw){
   return JSON.parse(dec.decode(new Uint8Array(pt)));
 }
 
-/* ==== ストア ==== */
+/* ========= ストア ========= */
 const LS_ENC="memo_plus_encrypted_v1"; const LS_PLAIN="memo_plus_plain_v1";
 let password=""; let store=null; let viewMode="list"; let calCursor=new Date();
-function emptyStore(){
-  return { version:1, requiresPassword:false, hmacSaltB64:b64enc(crypto.getRandomValues(new Uint8Array(16))), entries:[], images:{} };
-}
+function emptyStore(){ return { version:1, requiresPassword:false, hmacSaltB64:b64enc(crypto.getRandomValues(new Uint8Array(16))), entries:[], images:{} }; }
 function entryMaterial(e){ return [e.id,e.createdAt,e.sealedAt??"",e.title,e.category,e.note,(e.imageId||""),(e.mood||"")].join("|"); }
 async function computeEntryHash(e, prev){ return sha256Hex(prev+"|"+entryMaterial(e)); }
 
-/* ==== 起動 ==== */
+/* ========= 起動 ========= */
 async function load(){
-  // テーマ復元
   const th = localStorage.getItem("memo_plus_theme") || "elegant";
   document.documentElement.setAttribute("data-theme", th);
   document.getElementById("themeToggle").textContent = th==="simple" ? "外観：シンプル" : "外観：エレガント";
-  // 注意書き表示制御
   if (localStorage.getItem("memo_plus_notice_closed")==="1"){ document.getElementById("notice").style.display="none"; }
 
-  // 暗号化データがある場合は必ずロック画面から開始
   const encPayload = localStorage.getItem(LS_ENC);
-  if (encPayload){ store=null; } 
-  else { const plain=localStorage.getItem(LS_PLAIN); store=plain?JSON.parse(plain):emptyStore(); }
-
+  if (encPayload){ store=null; } else { const plain=localStorage.getItem(LS_PLAIN); store=plain?JSON.parse(plain):emptyStore(); }
   render();
 }
 
-/* ==== 保存 ==== */
+/* ========= 保存 ========= */
 async function persist(next){
   if (next.requiresPassword){
     if (!password){ setMsg("パスワード未入力のため保存できません。先にロック設定で設定してください。"); return; }
@@ -293,65 +289,25 @@ async function persist(next){
   store=next; render();
 }
 
-/* ==== UI参照 ==== */
+/* ========= UI参照 ========= */
 const el=id=>document.getElementById(id);
 const $title=el("title"), $cat=el("cat"), $note=el("note"), $img=el("img");
 const $list=el("list"), $count=el("count"), $badge=el("chainBadge"), $msg=el("msg");
 const $viewTitle=el("viewTitle");
 
-/* ==== ムードUI ==== */
+/* ムード */
 const $moodPick = document.getElementById("moodPick");
 let currentMood = null;
 $moodPick.querySelectorAll(".mood-btn").forEach(btn=>{
-  btn.onclick = ()=>{
-    $moodPick.querySelectorAll(".mood-btn").forEach(b=>b.classList.remove("active"));
-    btn.classList.add("active");
-    currentMood = btn.dataset.mood;
-  };
+  btn.onclick = ()=>{ $moodPick.querySelectorAll(".mood-btn").forEach(b=>b.classList.remove("active")); btn.classList.add("active"); currentMood = btn.dataset.mood; };
 });
-function mindMessage(mood){
-  const list = {
-    happy: [
-      "前向きに過ごせた日、えらい！その感覚を大切に😊",
-      "小さな喜びを見つけられたね、素敵！",
-      "よく眠ってよく笑って、心の体力が増えてるよ🌿"
-    ],
-    neutral: [
-      "淡々と積み上げられたね。続ける力は強い味方です。",
-      "普通でOK、普通がいちばんの土台👏",
-      "静かな一日も前進。積み重ねが効いてくるよ。"
-    ],
-    sad: [
-      "しんどい日も記録に残せた。まずは自分をいたわろう🥲",
-      "涙は弱さじゃなく回復の合図。今日はやさしく過ごそう。",
-      "ここに書けたなら半分は整理できてる。大丈夫。"
-    ],
-    angry: [
-      "怒りは境界線のサイン。深呼吸、事実を残せたの立派🔥",
-      "イヤだったね。嫌だと言葉にできた自分を守れたね。",
-      "怒りの熱はパワーに変わる。焦らずいこう。"
-    ],
-    tired: [
-      "おつかれさま。休む勇気も大事。今日は早めに休もう😴",
-      "がんばったね。水を飲んで目を閉じて、深呼吸。",
-      "体力は有限。やるべきは“休む”ことだけでいい日もある。"
-    ],
-    default: [
-      "記録してくれてありがとう。小さな一歩が積み重なっていきます。",
-      "未来の自分を助けるメモが増えたよ、すごい！",
-      "たとえ短くても“残す”がいちばん大事。"
-    ]
-  };
-  const arr = list[mood] || list.default;
-  return arr[Math.floor(Math.random()*arr.length)];
-}
+function mindMessage(m){ const map={happy:["前向きに過ごせたね！"],neutral:["淡々と積み上げられた。"],sad:["しんどい日も残せた、えらい。"],angry:["境界線を守れたね。"],tired:["おつかれさま。今日は休もう。"],def:["記録ありがとう。小さな一歩。"]}; const arr=map[m]||map.def; return arr[Math.floor(Math.random()*arr.length)]; }
 
-/* ==== ロック関連 ==== */
+/* ========= ロックUI ========= */
 function setMsg(t){ $msg.textContent=t||""; }
 function renderLock(){
   const p=el("lockPanel"); p.innerHTML="";
-  // 暗号化データがある＝ロックから開始
-  if (store===null){
+  if (store===null){ // 解錠
     const w=document.createElement("div");
     w.innerHTML=`<div class="muted">暗号化データがあります。パスワードで解錠してください。</div>
       <label>パスワード</label><input id="pwIn" type="password" placeholder="••••••••">
@@ -359,16 +315,18 @@ function renderLock(){
       <div class="muted" style="margin-top:8px">※ 忘れると復元できません。</div>`;
     p.appendChild(w);
     el("btnUnlock").onclick=async()=>{
-      try{ const payload=JSON.parse(localStorage.getItem(LS_ENC));
-        const data=await decryptJson(payload, el("pwIn").value);
+      try{ const payload=JSON.parse(localStorage.getItem(LS_ENC)); const data=await decryptJson(payload, el("pwIn").value);
         password=el("pwIn").value; store=data; render();
       }catch{ setMsg("パスワードが違う可能性があります"); }
     };
+    // お守り：初期化ボタン
+    const fix=document.createElement('button'); fix.className='btn-outline'; fix.style='margin-top:8px'; fix.textContent='表示がおかしい時の初期化';
+    fix.onclick = async()=>{ try{ localStorage.removeItem(LS_ENC); localStorage.removeItem(LS_PLAIN); if('caches' in window){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } } finally { location.reload(); } };
+    p.appendChild(fix);
     return;
   }
 
-  // 通常のロック設定UI（参考）
-  if (!store.requiresPassword){
+  if (!store.requiresPassword){ // 初回設定誘導
     const w=document.createElement("div");
     w.innerHTML=`<div class="muted">現在：<b>パスワード未設定</b>（平文保存）</div>
       <label>新しいパスワード</label><input id="pw1" type="password">
@@ -389,45 +347,33 @@ function renderLock(){
   }
 }
 
-/* 初回パスワード設定の全画面ゲート */
+/* 初回パスワード設定ゲート */
 function needGate(){ return FORCE_LOCK && store && !store.requiresPassword; }
-function showGate(show){
-  const g = document.getElementById("gate");
-  g.style.display = show ? "flex" : "none";
-}
+function showGate(show){ document.getElementById("gate").style.display = show ? "flex" : "none"; }
 function bindGate(){
-  const btn = document.getElementById("gSet");
-  btn.onclick = async ()=>{
+  document.getElementById("gSet").onclick = async ()=>{
     const a = document.getElementById("gpw1").value;
     const b = document.getElementById("gpw2").value;
     const gmsg = document.getElementById("gmsg");
     if (!a || a!==b){ gmsg.textContent="パスワードが一致しません"; return; }
-    password = a;
-    await persist({ ...(store||emptyStore()), requiresPassword:true });
-    showGate(false);
-    setMsg("暗号化しました。以後は解錠が必要です。");
+    password = a; await persist({ ...(store||emptyStore()), requiresPassword:true });
+    showGate(false); setMsg("暗号化しました。以後は解錠が必要です。");
   };
 }
 
-/* ==== チェーン検証 ==== */
+/* ========= チェーン検証 ========= */
 async function verifyChain(){
   if (!store) return {ok:true};
-  let prev="GENESIS"; const salt=b64dec(store.hmacSaltB64);
+  let prev="GENESIS";
   for (let i=0;i<store.entries.length;i++){
     const e=store.entries[i]; const expected=await computeEntryHash(e, prev);
     if (expected!==e.hash) return {ok:false, idx:i, reason:"ハッシュ不一致（改ざんの可能性）"};
-    if (store.requiresPassword && e.hmac){
-      const mat=enc.encode(prev+"|"+entryMaterial(e));
-      const key=await deriveHmac(password, salt);
-      const ok=await crypto.subtle.verify("HMAC", key, hexToBuf(e.hmac), mat);
-      if (!ok) return {ok:false, idx:i, reason:"署名検証失敗（改ざんの可能性）"};
-    }
     prev=e.hash;
   }
   return {ok:true};
 }
 
-/* ==== CRUD ==== */
+/* ========= CRUD ========= */
 async function addEntry(){
   if (store===null){ setMsg("まずパスワードを入れて解錠してください"); return; }
   if (!store.requiresPassword && FORCE_LOCK){ setMsg("まずロック設定でパスワードを設定してください"); showGate(true); return; }
@@ -443,18 +389,10 @@ async function addEntry(){
   }
   const now=new Date().toISOString();
   const prev=store.entries[store.entries.length-1]?.hash ?? "GENESIS";
-  const draft={ id:uuid(), createdAt:now, sealedAt:null, title, category:cat, note, imageId, mood: currentMood || null, prevHash:prev, hash:"", hmac:null };
+  const draft={ id:uuid(), createdAt:now, sealedAt:null, title, category:cat, note, imageId, mood: currentMood || null, prevHash:prev, hash:"" };
   draft.hash=await computeEntryHash(draft, prev);
-  if (store.requiresPassword){
-    const mat=enc.encode(prev+"|"+entryMaterial(draft));
-    const key=await deriveHmac(password, b64dec(store.hmacSaltB64));
-    const sig=await crypto.subtle.sign("HMAC", key, mat);
-    draft.hmac=toHex(sig);
-  }
   await persist({ ...store, entries:[...store.entries, draft] });
-  $title.value=""; $note.value=""; $img.value="";
-  $moodPick.querySelectorAll(".mood-btn").forEach(b=>b.classList.remove("active"));
-  currentMood = null;
+  $title.value=""; $note.value=""; $img.value=""; $moodPick.querySelectorAll(".mood-btn").forEach(b=>b.classList.remove("active")); currentMood=null;
   setMsg(mindMessage(draft.mood));
 }
 async function editEntry(id, fields){
@@ -462,16 +400,7 @@ async function editEntry(id, fields){
   const idx=store.entries.findIndex(e=>e.id===id); if (idx<0) return;
   const t=store.entries[idx]; if (t.sealedAt){ setMsg("封印済みは編集できません"); return; }
   const arr=[...store.entries]; arr[idx]={ ...t, ...fields };
-  let prev="GENESIS";
-  for (let i=0;i<arr.length;i++){
-    arr[i].prevHash=prev; arr[i].hash=await computeEntryHash(arr[i], prev);
-    if (store.requiresPassword){
-      const key=await deriveHmac(password, b64dec(store.hmacSaltB64));
-      const sig=await crypto.subtle.sign("HMAC", key, enc.encode(prev+"|"+entryMaterial(arr[i])));
-      arr[i].hmac=toHex(sig);
-    } else arr[i].hmac=null;
-    prev=arr[i].hash;
-  }
+  let prev="GENESIS"; for (let i=0;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash=await computeEntryHash(arr[i], prev); prev=arr[i].hash; }
   await persist({ ...store, entries:arr });
 }
 async function sealEntry(id){
@@ -480,15 +409,7 @@ async function sealEntry(id){
   if (store.entries[idx].sealedAt) return;
   const arr=[...store.entries]; arr[idx]={ ...store.entries[idx], sealedAt:new Date().toISOString() };
   let prev=idx===0 ? "GENESIS" : arr[idx-1].hash;
-  for (let i=idx;i<arr.length;i++){
-    arr[i].prevHash=prev; arr[i].hash=await computeEntryHash(arr[i], prev);
-    if (store.requiresPassword){
-      const key=await deriveHmac(password, b64dec(store.hmacSaltB64));
-      const sig=await crypto.subtle.sign("HMAC", key, enc.encode(prev+"|"+entryMaterial(arr[i])));
-      arr[i].hmac=toHex(sig);
-    } else arr[i].hmac=null;
-    prev=arr[i].hash;
-  }
+  for (let i=idx;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash=await computeEntryHash(arr[i], prev); prev=arr[i].hash; }
   await persist({ ...store, entries:arr });
 }
 async function removeEntry(id){
@@ -496,78 +417,48 @@ async function removeEntry(id){
   const idx=store.entries.findIndex(e=>e.id===id); if (idx<0) return;
   if (store.entries[idx].sealedAt){ setMsg("封印済みは削除できません"); return; }
   const arr=store.entries.filter(e=>e.id!==id);
-  let prev="GENESIS";
-  for (let i=0;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash=await computeEntryHash(arr[i], prev); prev=arr[i].hash; }
+  let prev="GENESIS"; for (let i=0;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash=await computeEntryHash(arr[i], prev); prev=arr[i].hash; }
   await persist({ ...store, entries:arr });
 }
 
-/* ==== 印刷用メタ情報 ==== */
-function computeRange(){
-  if (!store || !store.entries.length) return { from:"—", to:"—" };
+/* ========= 印刷メタ ========= */
+function computeRange(){ if (!store || !store.entries.length) return { from:"—", to:"—" };
   const sorted=[...store.entries].sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
-  return { from: jpDate(sorted[0].createdAt), to: jpDate(sorted[sorted.length-1].createdAt) };
-}
-function preparePrintHeader(){
-  const {from,to}=computeRange();
-  const meta = `印刷日：${jpDate(new Date())}　記録件数：${store?store.entries.length:0}　期間：${from} 〜 ${to}`;
-  document.getElementById("printMeta").textContent = meta;
-}
+  return { from: jpDate(sorted[0].createdAt), to: jpDate(sorted[sorted.length-1].createdAt) }; }
+function preparePrintHeader(){ const {from,to}=computeRange(); el("printMeta").textContent=`印刷日：${jpDate(new Date())}　記録件数：${store?store.entries.length:0}　期間：${from} 〜 ${to}`; }
 
-/* ==== 一覧描画 ==== */
+/* ========= 一覧描画 ========= */
+async function verifyChainBadge(){ const vr=await verifyChain(); el("chainBadge").innerHTML = vr.ok ? `<span class="chip good">改ざん検知: 異常なし</span>` : `<span class="chip bad">チェーン破損: #${vr.idx+1} ${vr.reason}</span>`; }
 async function renderList(){
   const $list=el("list"); $list.innerHTML="";
   if (!store){ el("count").textContent="0"; el("chainBadge").innerHTML=""; return; }
-  el("count").textContent=store.entries.length;
-  const vr=await verifyChain();
-  el("chainBadge").innerHTML = vr.ok ? `<span class="chip good">改ざん検知: 異常なし</span>`
-                                     : `<span class="chip bad">チェーン破損: #${vr.idx+1} ${vr.reason}</span>`;
+  el("count").textContent=store.entries.length; verifyChainBadge();
   for (const e of store.entries){
     const li=document.createElement("li"); li.className="item";
-    const header=document.createElement("div");
-    header.innerHTML=`<div class="meta">作成: ${jpTime(e.createdAt)}${e.sealedAt?` ／ 封印: ${jpTime(e.sealedAt)}`:""}</div>
-                      <div class="chip">${e.category}</div>`;
-    const title=document.createElement("div"); title.style.fontWeight="600"; title.style.marginTop="6px"; title.textContent=e.title||"（無題）";
-    const note=document.createElement("div"); note.style.whiteSpace="pre-wrap"; note.style.marginTop="6px"; note.textContent=e.note||"";
-    li.appendChild(header); li.appendChild(title);
-
-    // ムード表示
-    if (e.mood){
-      const moodLine=document.createElement("div"); moodLine.className="meta";
-      const map={happy:"🙂 前向き", neutral:"😐 ふつう", sad:"😢 しんどい", angry:"😡 いらだち", tired:"😴 つかれ"};
-      const color={happy:"mood-happy", neutral:"mood-neutral", sad:"mood-sad", angry:"mood-angry", tired:"mood-tired"};
-      moodLine.innerHTML = `気持ち：${map[e.mood]||"—"} <span class="mood-dot ${color[e.mood]||""}"></span>`;
-      li.appendChild(moodLine);
-    }
-
-    if (e.imageId && store.images[e.imageId]){ const img=document.createElement("img"); img.src=store.images[e.imageId]; img.className="preview"; li.appendChild(img); }
-    li.appendChild(note);
-
-    const ops=document.createElement("div");
-    ops.className="noprint";
-    ops.style.display="flex"; ops.style.gap="8px"; ops.style.marginTop="8px";
+    li.innerHTML=`<div class="meta">作成: ${jpTime(e.createdAt)}${e.sealedAt?` ／ 封印: ${jpTime(e.sealedAt)}`:""}</div>
+      <div class="chip">${e.category}</div>
+      <div style="font-weight:600; margin-top:6px">${e.title||"（無題）"}</div>
+      ${e.mood?`<div class="meta">気持ち：${{happy:"🙂 前向き",neutral:"😐 ふつう",sad:"😢 しんどい",angry:"😡 いらだち",tired:"😴 つかれ"}[e.mood]}</div>`:""}
+      ${e.imageId && store.images[e.imageId] ? `<img class="preview" src="${store.images[e.imageId]}" alt="添付画像">` : ""}
+      <div style="white-space:pre-wrap; margin-top:6px">${e.note||""}</div>`;
+    const ops=document.createElement("div"); ops.className="noprint"; ops.style="display:flex;gap:8px;margin-top:8px";
     if (!e.sealedAt){
-      const bEdit=document.createElement("button"); bEdit.className="btn-outline"; bEdit.textContent="編集";
-      bEdit.onclick=async()=>{ const t=prompt("タイトルを編集", e.title||""); if(t===null)return; const n=prompt("本文を編集", e.note||""); if(n===null)return; await editEntry(e.id,{title:t,note:n}); };
-      const bDel=document.createElement("button"); bDel.className="btn-outline"; bDel.textContent="削除";
-      bDel.onclick=()=>{ if(confirm("削除しますか？")) removeEntry(e.id); };
-      const bSeal=document.createElement("button"); bSeal.className="btn-seal"; bSeal.textContent="封印（確定）"; bSeal.onclick=()=>sealEntry(e.id);
-      ops.append(bEdit,bDel,bSeal);
+      const b1=document.createElement("button"); b1.className="btn-outline"; b1.textContent="編集";
+      b1.onclick=async()=>{ const t=prompt("タイトルを編集", e.title||""); if(t===null)return; const n=prompt("本文を編集", e.note||""); if(n===null)return; await editEntry(e.id,{title:t,note:n}); };
+      const b2=document.createElement("button"); b2.className="btn-outline"; b2.textContent="削除"; b2.onclick=()=>{ if(confirm("削除しますか？")) removeEntry(e.id); };
+      const b3=document.createElement("button"); b3.className="btn-seal"; b3.textContent="封印（確定）"; b3.onclick=()=>sealEntry(e.id);
+      ops.append(b1,b2,b3);
     }else{
       const s=document.createElement("span"); s.className="chip good"; s.textContent="封印済み・編集不可"; ops.appendChild(s);
     }
     li.appendChild(ops);
-
-    const dbg=document.createElement("div");
-    dbg.className="meta noprint";
-    dbg.style.marginTop="6px";
-    dbg.textContent=`prev:${e.prevHash.slice(0,16)}…  hash:${e.hash.slice(0,16)}…${e.hmac?`  hmac:${e.hmac.slice(0,16)}…`:""}`;
+    const dbg=document.createElement("div"); dbg.className="meta noprint"; dbg.style="margin-top:6px"; dbg.textContent=`hash:${e.hash.slice(0,16)}…`;
     li.appendChild(dbg);
-
     $list.appendChild(li);
   }
 }
 
-/* ==== カレンダー ==== */
+/* ========= カレンダー/統計 ========= */
 function ymdKey(d){ return new Date(d).toLocaleDateString("ja-JP",{ timeZone:"Asia/Tokyo", year:"numeric", month:"2-digit", day:"2-digit"}); }
 function monthMeta(date){ const y=date.getFullYear(), m=date.getMonth(); const first=new Date(y,m,1); const firstDow=(first.getDay()+7)%7; const daysInMonth=new Date(y,m+1,0).getDate(); const prevDays=new Date(y,m,0).getDate(); return {y,m,firstDow,daysInMonth,prevDays}; }
 function groupByDate(entries){ const map={}; for(const e of entries){ const k=ymdKey(e.createdAt); (map[k] ||= []).push(e); } return map; }
@@ -587,16 +478,6 @@ function renderCalendar(){
       const badges=document.createElement("div"); badges.className="cal-badges";
       const cats=new Set(grouped[key].map(e=>e.category)); for(const cat of cats){ const b=document.createElement("span"); b.className="badge"; b.textContent=cat; badges.appendChild(b); }
       cell.appendChild(badges);
-
-      const moodRow = document.createElement("div"); moodRow.style.marginTop="2px";
-      const mcolor = { happy:"mood-happy", neutral:"mood-neutral", sad:"mood-sad", angry:"mood-angry", tired:"mood-tired" };
-      for (const ev of grouped[key].slice(0,5)){
-        if (!ev.mood) continue;
-        const dot = document.createElement("span"); dot.className = "mood-dot " + (mcolor[ev.mood]||"");
-        moodRow.appendChild(dot);
-      }
-      cell.appendChild(moodRow);
-
       const list=document.createElement("div"); list.className="cal-list";
       for(const e of grouped[key].slice(0,4)){ const div=document.createElement("div"); div.className="cal-evt"; div.title=e.title||e.note||""; div.textContent=(e.title||e.note||"（無題）"); list.appendChild(div); }
       if(grouped[key].length>4){ const more=document.createElement("div"); more.className="cal-evt"; more.textContent=`…他 ${grouped[key].length-4} 件`; list.appendChild(more); }
@@ -606,146 +487,78 @@ function renderCalendar(){
     grid.appendChild(cell);
   }
 }
-
-/* ==== 統計 ==== */
-function getWeekKey(d){
-  const dt = new Date(d);
-  const one = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
-  const dow = (one.getDay()+6)%7; // 月曜基準
-  const monday = new Date(one); monday.setDate(one.getDate()-dow);
-  return monday.toISOString().slice(0,10);
-}
 function summarize(){
-  const weeks = new Map();
-  const moodCount = { happy:0, neutral:0, sad:0, angry:0, tired:0 };
+  const weeks = new Map(); const moodCount = { happy:0, neutral:0, sad:0, angry:0, tired:0 };
   if (!store) return { weeks:[], moodCount };
-  for (const e of store.entries){
-    const k = getWeekKey(e.createdAt);
-    weeks.set(k, (weeks.get(k)||0)+1);
-    if (e.mood) moodCount[e.mood] = (moodCount[e.mood]||0)+1;
-  }
-  const arr = [...weeks.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-8);
-  return { weeks: arr, moodCount };
+  for (const e of store.entries){ const dt=new Date(e.createdAt); const d=new Date(dt.getFullYear(),dt.getMonth(),dt.getDate()); const dow=(d.getDay()+6)%7; const monday=new Date(d); monday.setDate(d.getDate()-dow); const k=monday.toISOString().slice(0,10);
+    weeks.set(k,(weeks.get(k)||0)+1); if (e.mood) moodCount[e.mood] = (moodCount[e.mood]||0)+1; }
+  const arr=[...weeks.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-8);
+  return { weeks:arr, moodCount };
 }
 function renderStats(){
   const wrap = document.getElementById("statsWrap");
   wrap.innerHTML = "";
   const { weeks, moodCount } = summarize();
-
   const maxv = Math.max(1, ...weeks.map(w=>w[1]));
-  const W=520,H=160,P=24;
-  let bars = "";
-  weeks.forEach(([wk,cnt],i)=>{
-    const bw = (W-2*P)/Math.max(weeks.length,1)*0.7;
-    const gap = (W-2*P)/Math.max(weeks.length,1);
-    const x = P + i*gap + (gap-bw)/2;
-    const h = (H-2*P) * (cnt/maxv);
-    const y = H-P - h;
+  const W=520,H=160,P=24; let bars="";
+  weeks.forEach(([wk,cnt],i)=>{ const bw=(W-2*P)/Math.max(weeks.length,1)*0.7; const gap=(W-2*P)/Math.max(weeks.length,1); const x=P + i*gap + (gap-bw)/2; const h=(H-2*P) * (cnt/maxv); const y=H-P - h;
     bars += `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="6" ry="6" fill="#0f172a"></rect>
              <text x="${x+bw/2}" y="${H-P+12}" font-size="10" text-anchor="middle" fill="#475569">${wk.slice(5)}</text>
-             <text x="${x+bw/2}" y="${y-4}" font-size="11" text-anchor="middle" fill="#0f172a">${cnt}</text>`;
-  });
+             <text x="${x+bw/2}" y="${y-4}" font-size="11" text-anchor="middle" fill="#0f172a">${cnt}</text>`; });
   const svgBar = `<svg width="${W}" height="${H}" role="img" aria-label="週別記録数"><rect x="0" y="0" width="${W}" height="${H}" fill="white" stroke="#e5e7eb"/><g>${bars}</g></svg>`;
-
   const total = Object.values(moodCount).reduce((a,b)=>a+b,0) || 1;
   const colors = { happy:"#16a34a", neutral:"#0284c7", sad:"#7c3aed", angry:"#dc2626", tired:"#ca8a04" };
-  const R=60, CX=90, CY=90, CIRC=2*Math.PI*R;
-  let acc=0, arcs="";
-  for (const k of ["happy","neutral","sad","angry","tired"]){
-    const frac = (moodCount[k]||0)/total;
-    const len = CIRC*frac;
-    arcs += `<circle r="${R}" cx="${CX}" cy="${CY}" fill="transparent" stroke="${colors[k]}" stroke-width="16"
-      stroke-dasharray="${len} ${CIRC-len}" transform="rotate(-90 ${CX} ${CY})"
-      stroke-dashoffset="${-acc}"></circle>`;
-    acc += len;
-  }
-  const legend = Object.entries(moodCount).map(([k,v])=>{
-    const label = {happy:"🙂前向き", neutral:"😐ふつう", sad:"😢しんどい", angry:"😡いらだち", tired:"😴つかれ"}[k];
-    return `<div style="display:flex;gap:6px;align-items:center"><span style="width:10px;height:10px;border-radius:2px;background:${colors[k]}"></span>
-            <span style="font-size:12px;color:#334155">${label}：${v}</span></div>`;
-  }).join("");
-
-  const svgRing = `
-    <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
-      <svg width="180" height="180" role="img" aria-label="ムード比率">
-        <circle r="${R}" cx="${CX}" cy="${CY}" fill="transparent" stroke="#e5e7eb" stroke-width="16"></circle>
-        ${arcs}
-      </svg>
-      <div>${legend}</div>
-    </div>`;
-
-  wrap.innerHTML = `
-    <div class="muted" style="margin-bottom:8px">※ 直近8週の記録傾向とムード内訳</div>
+  const R=60, CX=90, CY=90, CIRC=2*Math.PI*R; let acc=0, arcs="";
+  for (const k of ["happy","neutral","sad","angry","tired"]){ const frac=(moodCount[k]||0)/total; const len=CIRC*frac;
+    arcs += `<circle r="${R}" cx="${CX}" cy="${CY}" fill="transparent" stroke="${colors[k]}" stroke-width="16" stroke-dasharray="${len} ${CIRC-len}" transform="rotate(-90 ${CX} ${CY})" stroke-dashoffset="${-acc}"></circle>`; acc += len; }
+  wrap.innerHTML = `<div class="muted" style="margin-bottom:8px">※ 直近8週の記録傾向とムード内訳</div>
     <div class="card" style="margin-bottom:12px"><h3 style="margin:0 0 8px">週ごとの記録件数</h3>${svgBar}</div>
-    <div class="card"><h3 style="margin:0 0 8px">ムードの内訳</h3>${svgRing}</div>
-  `;
+    <div class="card"><h3 style="margin:0 0 8px">ムードの内訳</h3>
+      <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+        <svg width="180" height="180" role="img" aria-label="ムード比率">
+          <circle r="${R}" cx="${CX}" cy="${CY}" fill="transparent" stroke="#e5e7eb" stroke-width="16"></circle>${arcs}
+        </svg>
+        <div>${Object.entries(moodCount).map(([k,v])=>`<div style="display:flex;gap:6px;align-items:center"><span style="width:10px;height:10px;border-radius:2px;background:${colors[k]}"></span><span style="font-size:12px;color:#334155">${{happy:"🙂前向き",neutral:"😐ふつう",sad:"😢しんどい",angry:"😡いらだち",tired:"😴つかれ"}[k]}：${v}</span></div>`).join("")}</div>
+      </div>
+    </div>`;
 }
 
-/* ==== ビュー切替 ==== */
-let viewMode="list";
+/* ========= ビュー切替 ========= */
 function switchView(){
   const vList = el("btnViewList"), vCal = el("btnViewCal"), vStats = el("btnViewStats");
   const list = el("list"), cal = el("calendar"), stats = el("stats");
   vList.classList.remove("active"); vCal.classList.remove("active"); vStats.classList.remove("active");
   list.style.display = "none"; cal.style.display = "none"; stats.style.display = "none";
-
   if (viewMode==="list"){ $viewTitle.textContent="📚 記録一覧（最新が下）"; list.style.display=""; vList.classList.add("active"); }
   else if (viewMode==="cal"){ $viewTitle.textContent="📅 カレンダー"; cal.style.display=""; vCal.classList.add("active"); }
   else { $viewTitle.textContent="📈 統計（直近8週）"; stats.style.display=""; vStats.classList.add("active"); }
 }
 function render(){ renderLock(); switchView(); renderList(); if(viewMode==="cal") renderCalendar(); if(viewMode==="stats") renderStats(); renderGateIfNeeded(); }
 
-/* ==== 自動ロック ==== */
-function lockNow(){
-  store = null;               // ロック状態へ
-  password = "";              // メモリ上の鍵を消す
-  render();
-}
-function resetIdle(){
-  clearTimeout(idleTimer);
-  idleTimer = setTimeout(lockNow, IDLE_MINUTES * 60 * 1000);
-}
-["click","keydown","mousemove","touchstart"].forEach(ev=>{
-  window.addEventListener(ev, resetIdle, {passive:true});
-});
-document.addEventListener("visibilitychange", ()=>{
-  if (document.hidden) lockNow();   // 画面から離れたら即ロック
-});
+/* ========= 自動ロック ========= */
+function lockNow(){ store = null; password = ""; render(); }
+function resetIdle(){ clearTimeout(idleTimer); idleTimer = setTimeout(lockNow, IDLE_MINUTES * 60 * 1000); }
+["click","keydown","mousemove","touchstart"].forEach(ev=>{ window.addEventListener(ev, resetIdle, {passive:true}); });
+document.addEventListener("visibilitychange", ()=>{ if (document.hidden) lockNow(); });
 
-/* ==== 印刷/各種イベント ==== */
+/* ========= いろいろイベント ========= */
 el("btnAdd").onclick=addEntry;
-el("btnExport").onclick=()=>{
-  if(!store){ setMsg("解錠してからエクスポートしてください"); return; }
-  const blob=new Blob([JSON.stringify(store,null,2)],{type:"application/json"});
-  const url=URL.createObjectURL(blob); const a=document.createElement("a");
-  a.href=url; a.download=`memo-plus-${new Date().toISOString().replace(/[:.]/g,"-")}.json`; a.click(); URL.revokeObjectURL(url);
-};
+el("btnExport").onclick=()=>{ if(!store){ setMsg("解錠してからエクスポートしてください"); return; } const blob=new Blob([JSON.stringify(store,null,2)],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`memo-plus-${new Date().toISOString().replace(/[:.]/g,"-")}.json`; a.click(); URL.revokeObjectURL(url); };
 el("fileImport").onchange=(e)=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=async()=>{ try{ const obj=JSON.parse(r.result); if(typeof obj.version!=="number"||!Array.isArray(obj.entries)) throw 0; await persist(obj); setMsg("インポートしました"); }catch{ setMsg("インポート失敗"); } }; r.readAsText(f); };
 el("btnViewList").onclick=()=>{ viewMode="list"; switchView(); renderList(); };
 el("btnViewCal").onclick =()=>{ viewMode="cal";  switchView(); renderCalendar(); };
 el("btnViewStats").onclick=()=>{ viewMode="stats"; switchView(); renderStats(); };
 el("calPrev").onclick=()=>{ calCursor=new Date(calCursor.getFullYear(), calCursor.getMonth()-1, 1); renderCalendar(); };
 el("calNext").onclick=()=>{ calCursor=new Date(calCursor.getFullYear(), calCursor.getMonth()+1, 1); renderCalendar(); };
-el("themeToggle").onclick=()=>{
-  const cur=document.documentElement.getAttribute("data-theme");
-  const next=cur==="simple" ? "elegant" : "simple";
-  document.documentElement.setAttribute("data-theme", next);
-  el("themeToggle").textContent = next==="simple" ? "外観：シンプル" : "外観：エレガント";
-  localStorage.setItem("memo_plus_theme", next);
-};
+el("themeToggle").onclick=()=>{ const cur=document.documentElement.getAttribute("data-theme"); const next=cur==="simple" ? "elegant" : "simple"; document.documentElement.setAttribute("data-theme", next); el("themeToggle").textContent = next==="simple" ? "外観：シンプル" : "外観：エレガント"; localStorage.setItem("memo_plus_theme", next); };
 el("noticeClose").onclick=()=>{ el("notice").style.display="none"; localStorage.setItem("memo_plus_notice_closed","1"); };
-
-/* 相談用PDF：記録だけ印刷（現在のビューを出力） */
 el("btnPrintConsult").onclick=()=>{ preparePrintHeader(); window.print(); };
 
-/* ==== ゲート制御 ==== */
-function renderGateIfNeeded(){
-  bindGate();
-  if (needGate()) showGate(true); else showGate(false);
-}
+/* ========= ゲート制御 ========= */
+function renderGateIfNeeded(){ bindGate(); if (FORCE_LOCK && store && !store.requiresPassword) showGate(true); else showGate(false); }
 
-/* ==== 起動 ==== */
-window.addEventListener('load', ()=>{ resetIdle(); });
+/* ========= 起動 ========= */
+window.addEventListener('load', ()=>{ resetIdle(); if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js')); } });
 load();
 </script>
 </body>

@@ -56,6 +56,17 @@
   .cal-list{ margin-top:6px; font-size:12px; color:#334155; max-height:64px; overflow:auto; }
   .cal-evt{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
+  /* ムードUI */
+  .mood-pick { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .mood-btn { border:1px solid var(--border); background:#fff; padding:6px 10px; border-radius:999px; cursor:pointer; }
+  .mood-btn.active { background:var(--ink); color:#fff; }
+  .mood-dot { width:6px; height:6px; border-radius:50%; display:inline-block; margin-left:6px; vertical-align:middle; }
+  .mood-happy{ background:#16a34a; } .mood-neutral{ background:#0284c7; } .mood-sad{ background:#7c3aed; }
+  .mood-angry{ background:#dc2626; } .mood-tired{ background:#ca8a04; }
+
+  /* 統計 */
+  #stats .card{ margin-bottom:12px; }
+
   /* 印刷用ヘッダー（普段は非表示） */
   .print-only{ display:none; }
   @media (max-width: 980px){ .row{ grid-template-columns:1fr; } }
@@ -83,6 +94,7 @@
       <div class="view-toggle">
         <button id="btnViewList" class="active">一覧</button>
         <button id="btnViewCal">カレンダー</button>
+        <button id="btnViewStats">統計</button>
       </div>
       <button class="btn-outline" id="btnPrintConsult">相談用PDF</button>
       <button class="btn-outline" id="btnExport">エクスポート</button>
@@ -127,6 +139,14 @@
       </select>
       <label>本文</label>
       <textarea id="note" placeholder="例：2025/03/12 18:42 自宅を出発。コンビニで◯◯を購入（レシート添付）。その後◯◯方面へ。帰宅は21:05。会話の要点：……"></textarea>
+      <label>今日の気持ち（任意）</label>
+      <div id="moodPick" class="mood-pick">
+        <button type="button" class="mood-btn" data-mood="happy">🙂 前向き</button>
+        <button type="button" class="mood-btn" data-mood="neutral">😐 ふつう</button>
+        <button type="button" class="mood-btn" data-mood="sad">😢 しんどい</button>
+        <button type="button" class="mood-btn" data-mood="angry">😡 いらだち</button>
+        <button type="button" class="mood-btn" data-mood="tired">😴 つかれ</button>
+      </div>
       <label>画像（任意・PNG/JPEG・5MB以下）</label>
       <input id="img" type="file" accept="image/png,image/jpeg">
       <div style="display:flex; gap:8px; margin-top:12px;">
@@ -160,6 +180,11 @@
           <div class="cal-dow">日</div><div class="cal-dow">月</div><div class="cal-dow">火</div><div class="cal-dow">水</div><div class="cal-dow">木</div><div class="cal-dow">金</div><div class="cal-dow">土</div>
         </div>
         <div class="cal-grid" id="calGrid"></div>
+      </div>
+
+      <!-- 統計 -->
+      <div id="stats" style="display:none;">
+        <div id="statsWrap"></div>
       </div>
     </section>
   </div>
@@ -206,13 +231,17 @@ let password=""; let store=null; let viewMode="list"; let calCursor=new Date();
 function emptyStore(){
   return { version:1, requiresPassword:false, hmacSaltB64:b64enc(crypto.getRandomValues(new Uint8Array(16))), entries:[], images:{} };
 }
-function entryMaterial(e){ return [e.id,e.createdAt,e.sealedAt??"",e.title,e.category,e.note,(e.imageId||"")].join("|"); }
+function entryMaterial(e){ return [e.id,e.createdAt,e.sealedAt??"",e.title,e.category,e.note,(e.imageId||""),(e.mood||"")].join("|"); }
 async function computeEntryHash(e, prev){ return sha256Hex(prev+"|"+entryMaterial(e)); }
+
 async function load(){
+  // テーマ復元
   const th = localStorage.getItem("memo_plus_theme") || "elegant";
   document.documentElement.setAttribute("data-theme", th);
   document.getElementById("themeToggle").textContent = th==="simple" ? "外観：シンプル" : "外観：エレガント";
+  // 注意書き表示制御
   if (localStorage.getItem("memo_plus_notice_closed")==="1"){ document.getElementById("notice").style.display="none"; }
+
   const encPayload = localStorage.getItem(LS_ENC);
   if (encPayload){ store=null; } else { const plain=localStorage.getItem(LS_PLAIN); store=plain?JSON.parse(plain):emptyStore(); }
   render();
@@ -235,6 +264,27 @@ const el=id=>document.getElementById(id);
 const $title=el("title"), $cat=el("cat"), $note=el("note"), $img=el("img");
 const $list=el("list"), $count=el("count"), $badge=el("chainBadge"), $msg=el("msg");
 const $viewTitle=el("viewTitle");
+
+/* ==== ムードUI ==== */
+const $moodPick = document.getElementById("moodPick");
+let currentMood = null;
+$moodPick.querySelectorAll(".mood-btn").forEach(btn=>{
+  btn.onclick = ()=>{
+    $moodPick.querySelectorAll(".mood-btn").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    currentMood = btn.dataset.mood; // "happy" | "neutral" | "sad" | "angry" | "tired"
+  };
+});
+function mindMessage(mood){
+  switch(mood){
+    case "happy":  return "前向きに過ごせた日、えらい！その感覚を大切に😊";
+    case "neutral":return "淡々と積み上げられたね。続ける力は強い味方です。";
+    case "sad":    return "しんどい日も記録に残せた。まずは自分をいたわろう🥲";
+    case "angry":  return "怒りは境界線のサイン。深呼吸、そして事実を残せたの立派🔥";
+    case "tired":  return "おつかれさま。休む勇気も大事。今日は早めに休もう😴";
+    default:       return "記録してくれてありがとう。小さな一歩が積み重なっていきます。";
+  }
+}
 
 /* ==== ロック ==== */
 function setMsg(t){ $msg.textContent=t||""; }
@@ -308,7 +358,7 @@ async function addEntry(){
   }
   const now=new Date().toISOString();
   const prev=store.entries[store.entries.length-1]?.hash ?? "GENESIS";
-  const draft={ id:uuid(), createdAt:now, sealedAt:null, title, category:cat, note, imageId, prevHash:prev, hash:"", hmac:null };
+  const draft={ id:uuid(), createdAt:now, sealedAt:null, title, category:cat, note, imageId, mood: currentMood || null, prevHash:prev, hash:"", hmac:null };
   draft.hash=await computeEntryHash(draft, prev);
   if (store.requiresPassword){
     const mat=enc.encode(prev+"|"+entryMaterial(draft));
@@ -317,7 +367,10 @@ async function addEntry(){
     draft.hmac=toHex(sig);
   }
   await persist({ ...store, entries:[...store.entries, draft] });
-  $title.value=""; $note.value=""; $img.value=""; setMsg("保存しました");
+  $title.value=""; $note.value=""; $img.value="";
+  $moodPick.querySelectorAll(".mood-btn").forEach(b=>b.classList.remove("active"));
+  currentMood = null;
+  setMsg(mindMessage(draft.mood));
 }
 async function editEntry(id, fields){
   const idx=store.entries.findIndex(e=>e.id===id); if (idx<0) return;
@@ -388,11 +441,21 @@ async function renderList(){
     const title=document.createElement("div"); title.style.fontWeight="600"; title.style.marginTop="6px"; title.textContent=e.title||"（無題）";
     const note=document.createElement("div"); note.style.whiteSpace="pre-wrap"; note.style.marginTop="6px"; note.textContent=e.note||"";
     li.appendChild(header); li.appendChild(title);
+
+    // ムード表示
+    if (e.mood){
+      const moodLine=document.createElement("div"); moodLine.className="meta";
+      const map={happy:"🙂 前向き", neutral:"😐 ふつう", sad:"😢 しんどい", angry:"😡 いらだち", tired:"😴 つかれ"};
+      const color={happy:"mood-happy", neutral:"mood-neutral", sad:"mood-sad", angry:"mood-angry", tired:"mood-tired"};
+      moodLine.innerHTML = `気持ち：${map[e.mood]||"—"} <span class="mood-dot ${color[e.mood]||""}"></span>`;
+      li.appendChild(moodLine);
+    }
+
     if (e.imageId && store.images[e.imageId]){ const img=document.createElement("img"); img.src=store.images[e.imageId]; img.className="preview"; li.appendChild(img); }
     li.appendChild(note);
 
     const ops=document.createElement("div");
-    ops.className="noprint";   /* ← 印刷で隠す */
+    ops.className="noprint";   /* 印刷で隠す */
     ops.style.display="flex"; ops.style.gap="8px"; ops.style.marginTop="8px";
     if (!e.sealedAt){
       const bEdit=document.createElement("button"); bEdit.className="btn-outline"; bEdit.textContent="編集";
@@ -407,7 +470,7 @@ async function renderList(){
     li.appendChild(ops);
 
     const dbg=document.createElement("div");
-    dbg.className="meta noprint";   /* ← 印刷で隠す（ハッシュ行） */
+    dbg.className="meta noprint";   /* 印刷で隠す（ハッシュ行） */
     dbg.style.marginTop="6px";
     dbg.textContent=`prev:${e.prevHash.slice(0,16)}…  hash:${e.hash.slice(0,16)}…${e.hmac?`  hmac:${e.hmac.slice(0,16)}…`:""}`;
     li.appendChild(dbg);
@@ -436,6 +499,17 @@ function renderCalendar(){
       const badges=document.createElement("div"); badges.className="cal-badges";
       const cats=new Set(grouped[key].map(e=>e.category)); for(const cat of cats){ const b=document.createElement("span"); b.className="badge"; b.textContent=cat; badges.appendChild(b); }
       cell.appendChild(badges);
+
+      // ムードの小ドット（最大5）
+      const moodRow = document.createElement("div"); moodRow.style.marginTop="2px";
+      const mcolor = { happy:"mood-happy", neutral:"mood-neutral", sad:"mood-sad", angry:"mood-angry", tired:"mood-tired" };
+      for (const ev of grouped[key].slice(0,5)){
+        if (!ev.mood) continue;
+        const dot = document.createElement("span"); dot.className = "mood-dot " + (mcolor[ev.mood]||"");
+        moodRow.appendChild(dot);
+      }
+      cell.appendChild(moodRow);
+
       const list=document.createElement("div"); list.className="cal-list";
       for(const e of grouped[key].slice(0,4)){ const div=document.createElement("div"); div.className="cal-evt"; div.title=e.title||e.note||""; div.textContent=(e.title||e.note||"（無題）"); list.appendChild(div); }
       if(grouped[key].length>4){ const more=document.createElement("div"); more.className="cal-evt"; more.textContent=`…他 ${grouped[key].length-4} 件`; list.appendChild(more); }
@@ -446,19 +520,94 @@ function renderCalendar(){
   }
 }
 
+/* ==== 統計 ==== */
+function getWeekKey(d){
+  const dt = new Date(d);
+  const one = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  const dow = (one.getDay()+6)%7; // 月曜基準
+  const monday = new Date(one); monday.setDate(one.getDate()-dow);
+  return monday.toISOString().slice(0,10);
+}
+function summarize(){
+  const weeks = new Map();
+  const moodCount = { happy:0, neutral:0, sad:0, angry:0, tired:0 };
+  if (!store) return { weeks:[], moodCount };
+  for (const e of store.entries){
+    const k = getWeekKey(e.createdAt);
+    weeks.set(k, (weeks.get(k)||0)+1);
+    if (e.mood) moodCount[e.mood] = (moodCount[e.mood]||0)+1;
+  }
+  const arr = [...weeks.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-8);
+  return { weeks: arr, moodCount };
+}
+function renderStats(){
+  const wrap = document.getElementById("statsWrap");
+  wrap.innerHTML = "";
+  const { weeks, moodCount } = summarize();
+
+  // 週別件数バー
+  const maxv = Math.max(1, ...weeks.map(w=>w[1]));
+  const W=520,H=160,P=24;
+  let bars = "";
+  weeks.forEach(([wk,cnt],i)=>{
+    const bw = (W-2*P)/Math.max(weeks.length,1)*0.7;
+    const gap = (W-2*P)/Math.max(weeks.length,1);
+    const x = P + i*gap + (gap-bw)/2;
+    const h = (H-2*P) * (cnt/maxv);
+    const y = H-P - h;
+    bars += `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="6" ry="6" fill="#0f172a"></rect>
+             <text x="${x+bw/2}" y="${H-P+12}" font-size="10" text-anchor="middle" fill="#475569">${wk.slice(5)}</text>
+             <text x="${x+bw/2}" y="${y-4}" font-size="11" text-anchor="middle" fill="#0f172a">${cnt}</text>`;
+  });
+  const svgBar = `<svg width="${W}" height="${H}" role="img" aria-label="週別記録数"><rect x="0" y="0" width="${W}" height="${H}" fill="white" stroke="#e5e7eb"/><g>${bars}</g></svg>`;
+
+  // ムード比率リング
+  const total = Object.values(moodCount).reduce((a,b)=>a+b,0) || 1;
+  const colors = { happy:"#16a34a", neutral:"#0284c7", sad:"#7c3aed", angry:"#dc2626", tired:"#ca8a04" };
+  const R=60, CX=90, CY=90, CIRC=2*Math.PI*R;
+  let acc=0, arcs="";
+  for (const k of ["happy","neutral","sad","angry","tired"]){
+    const frac = (moodCount[k]||0)/total;
+    const len = CIRC*frac;
+    arcs += `<circle r="${R}" cx="${CX}" cy="${CY}" fill="transparent" stroke="${colors[k]}" stroke-width="16"
+      stroke-dasharray="${len} ${CIRC-len}" transform="rotate(-90 ${CX} ${CY})"
+      stroke-dashoffset="${-acc}"></circle>`;
+    acc += len;
+  }
+  const legend = Object.entries(moodCount).map(([k,v])=>{
+    const label = {happy:"🙂前向き", neutral:"😐ふつう", sad:"😢しんどい", angry:"😡いらだち", tired:"😴つかれ"}[k];
+    return `<div style="display:flex;gap:6px;align-items:center"><span style="width:10px;height:10px;border-radius:2px;background:${colors[k]}"></span>
+            <span style="font-size:12px;color:#334155">${label}：${v}</span></div>`;
+  }).join("");
+
+  const svgRing = `
+    <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+      <svg width="180" height="180" role="img" aria-label="ムード比率">
+        <circle r="${R}" cx="${CX}" cy="${CY}" fill="transparent" stroke="#e5e7eb" stroke-width="16"></circle>
+        ${arcs}
+      </svg>
+      <div>${legend}</div>
+    </div>`;
+
+  wrap.innerHTML = `
+    <div class="muted" style="margin-bottom:8px">※ 直近8週の記録傾向とムード内訳</div>
+    <div class="card" style="margin-bottom:12px"><h3 style="margin:0 0 8px">週ごとの記録件数</h3>${svgBar}</div>
+    <div class="card"><h3 style="margin:0 0 8px">ムードの内訳</h3>${svgRing}</div>
+  `;
+}
+
 /* ==== ビュー切替 ==== */
 function switchView(){
-  if (viewMode==="list"){
-    $viewTitle.textContent="📚 記録一覧（最新が下）";
-    el("list").style.display=""; el("calendar").style.display="none";
-    el("btnViewList").classList.add("active"); el("btnViewCal").classList.remove("active");
-  }else{
-    $viewTitle.textContent="📅 カレンダー";
-    el("list").style.display="none"; el("calendar").style.display="";
-    el("btnViewCal").classList.add("active"); el("btnViewList").classList.remove("active");
-  }
+  const vList = el("btnViewList"), vCal = el("btnViewCal"), vStats = el("btnViewStats");
+  const list = el("list"), cal = el("calendar"), stats = el("stats");
+  vList.classList.remove("active"); vCal.classList.remove("active"); vStats.classList.remove("active");
+  list.style.display = "none"; cal.style.display = "none"; stats.style.display = "none";
+
+  if (viewMode==="list"){ $viewTitle.textContent="📚 記録一覧（最新が下）"; list.style.display=""; vList.classList.add("active"); }
+  else if (viewMode==="cal"){ $viewTitle.textContent="📅 カレンダー"; cal.style.display=""; vCal.classList.add("active"); }
+  else { $viewTitle.textContent="📈 統計（直近8週）"; stats.style.display=""; vStats.classList.add("active"); }
 }
-function render(){ renderLock(); switchView(); renderList(); if(viewMode==="cal") renderCalendar(); }
+function render(){ renderLock(); switchView(); renderList(); if(viewMode==="cal") renderCalendar(); if(viewMode==="stats") renderStats(); }
 
 /* ==== イベント ==== */
 el("btnAdd").onclick=addEntry;
@@ -471,6 +620,7 @@ el("btnExport").onclick=()=>{
 el("fileImport").onchange=(e)=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=async()=>{ try{ const obj=JSON.parse(r.result); if(typeof obj.version!=="number"||!Array.isArray(obj.entries)) throw 0; await persist(obj); setMsg("インポートしました"); }catch{ setMsg("インポート失敗"); } }; r.readAsText(f); };
 el("btnViewList").onclick=()=>{ viewMode="list"; switchView(); renderList(); };
 el("btnViewCal").onclick =()=>{ viewMode="cal";  switchView(); renderCalendar(); };
+el("btnViewStats").onclick=()=>{ viewMode="stats"; switchView(); renderStats(); };
 el("calPrev").onclick=()=>{ calCursor=new Date(calCursor.getFullYear(), calCursor.getMonth()-1, 1); renderCalendar(); };
 el("calNext").onclick=()=>{ calCursor=new Date(calCursor.getFullYear(), calCursor.getMonth()+1, 1); renderCalendar(); };
 el("themeToggle").onclick=()=>{
@@ -483,10 +633,7 @@ el("themeToggle").onclick=()=>{
 el("noticeClose").onclick=()=>{ el("notice").style.display="none"; localStorage.setItem("memo_plus_notice_closed","1"); };
 
 /* 相談用PDF：記録だけ印刷（現在のビューを出力） */
-el("btnPrintConsult").onclick=()=>{
-  preparePrintHeader();
-  window.print();
-};
+el("btnPrintConsult").onclick=()=>{ preparePrintHeader(); window.print(); };
 
 /* ==== 起動 ==== */
 load();

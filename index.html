@@ -1,565 +1,405 @@
 <!doctype html>
-<html lang="ja" data-theme="elegant">
+<html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Memo＋</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Memo＋</title>
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="改ざん防止・暗号化付き行動記録アプリ（画像添付／カテゴリ・検索AND/OR・並び替え・PDF印刷）" />
 
-<!-- PWA -->
-<link rel="manifest" href="./manifest.webmanifest">
-<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <!-- Tailwind & React (UMD) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
-<!-- フォント（控えめで読みやすい） -->
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600&display=swap" rel="stylesheet">
-
-<style>
-  :root{
-    --bg:#f6f7fb; --card:#fff; --ink:#0f172a; --muted:#64748b; --accent:#0ea5e9;
-    --border:#e5e7eb; --ok:#059669; --ok-ink:#fff;
-  }
-  [data-theme="simple"]{
-    --bg:#ffffff; --card:#ffffff; --ink:#111827; --muted:#6b7280; --accent:#2563eb; --border:#e5e7eb;
-  }
-  *{ box-sizing:border-box; }
-  body{ margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Noto Serif JP', serif; background:var(--bg); color:var(--ink);}
-  header{ position:sticky; top:0; background:#ffffffcc; backdrop-filter: blur(10px); border-bottom:1px solid var(--border); }
-  .wrap{ max-width:1100px; margin:0 auto; padding:14px; }
-  h1{ font-size:18px; margin:0; letter-spacing:.02em; }
-  .top-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-  .view-toggle button{ padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; color:var(--ink); }
-  .view-toggle .active{ background:var(--ink); color:#fff; }
-  .theme-toggle{ border:1px solid var(--border); background:#fff; border-radius:8px; padding:8px 10px; cursor:pointer; }
-  .row{ display:grid; gap:16px; grid-template-columns: 1fr 1.5fr; padding:16px 0; }
-  .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; }
-  .notice{ background:#fafafc; border:1px dashed var(--border); border-left:4px solid var(--accent); border-radius:12px; padding:12px 14px; margin:10px 0 0; color:#334155; }
-  .notice small{ color:var(--muted); }
-  label{ font-size:12px; color:var(--muted); display:block; margin:10px 0 6px; }
-  input, select, textarea{ width:100%; border:1px solid var(--border); border-radius:10px; padding:10px; font-size:14px; background:#fff; }
-  textarea{ height:120px; }
-  button{ border:0; padding:10px 14px; border-radius:10px; cursor:pointer; }
-  .btn{ background:var(--ink); color:#fff; }
-  .btn-outline{ background:#fff; border:1px solid var(--border); }
-  .btn-seal{ background:var(--ok); color:var(--ok-ink); }
-  .muted{ color:var(--muted); font-size:12px; }
-  ul{ list-style:none; padding:0; margin:0; }
-  .item{ border:1px solid var(--border); border-radius:12px; padding:12px; background:#fff; }
-  .meta{ font-size:12px; color:var(--muted); }
-  .chip{ font-size:11px; display:inline-block; padding:2px 8px; border:1px solid var(--border); border-radius:999px; margin-top:4px; }
-  .bad{ background:#fee2e2; border-color:#fecaca; color:#991b1b;}
-  .good{ background:#dcfce7; border-color:#bbf7d0; color:#065f46;}
-  img.preview{ max-height:220px; border-radius:8px; border:1px solid var(--border); display:block; margin-top:8px; }
-
-  /* カレンダー */
-  .cal-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
-  .cal-grid{ display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
-  .cal-dow{ text-align:center; font-size:12px; color:var(--muted); }
-  .cal-cell{ background:#fff; border:1px solid var(--border); border-radius:10px; min-height:90px; padding:8px; display:flex; flex-direction:column; gap:4px; }
-  .cal-date{ font-size:12px; color:#334155; display:flex; justify-content:space-between; align-items:center; }
-  .cal-cell.dim .cal-date{ color:#94a3b8; }
-  .dot{ width:6px; height:6px; border-radius:50%; background:var(--accent); display:inline-block; margin-left:6px; }
-  .cal-badges{ margin-top:4px; display:flex; flex-wrap:wrap; gap:4px; }
-  .badge{ font-size:10px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:999px; padding:1px 6px; }
-  .cal-list{ margin-top:6px; font-size:12px; color:#334155; max-height:64px; overflow:auto; }
-  .cal-evt{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-
-  /* ムードUI */
-  .mood-pick { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  .mood-btn { border:1px solid var(--border); background:#fff; padding:6px 10px; border-radius:999px; cursor:pointer; }
-  .mood-btn.active { background:var(--ink); color:#fff; }
-  .mood-dot { width:6px; height:6px; border-radius:50%; display:inline-block; margin-left:6px; vertical-align:middle; }
-  .mood-happy{ background:#16a34a; } .mood-neutral{ background:#0284c7; } .mood-sad{ background:#7c3aed; }
-  .mood-angry{ background:#dc2626; } .mood-tired{ background:#ca8a04; }
-
-  /* 印刷時：入力UIは非表示・記録だけ出力 */
-  .print-only{ display:none; }
-  @media print{
-    header, .noprint, #notice { display: none !important; }
-    body { background: #fff; }
-    .card { border:0; box-shadow:none; }
-    .row { display:block; }
-    .item { break-inside: avoid; page-break-inside: avoid; margin-bottom:12px; }
-    img.preview { max-width:100%; height:auto; }
-    .print-only{ display:block; margin: 8px 0 12px; }
-    .print-title{ font-size:18px; font-weight:700; margin-bottom:4px; }
-    .print-meta{ font-size:12px; color:#475569; }
-  }
-
-  /* パスワード強制ゲート（スマホでも必ず出る） */
-  .gate{
-    position:fixed; inset:0; display:none; align-items:center; justify-content:center;
-    background:rgba(248,250,252,.9); backdrop-filter: blur(6px); z-index:50;
-  }
-  .gate .panel{ max-width:420px; width:92%; background:#fff; border:1px solid var(--border); border-radius:16px; padding:18px; }
-  @media (max-width: 980px){ .row{ grid-template-columns:1fr; } }
-</style>
+  <!-- アイコン（同じフォルダに icon.png を置いてね） -->
+  <link rel="icon" type="image/png" href="./icon.png" />
+  <link rel="apple-touch-icon" href="./icon.png" />
+  <!-- マニフェストは下のスクリプトで生成してリンク -->
+  <link id="dynamic-manifest" rel="manifest" href="">
 </head>
-<body>
-<header>
-  <div class="wrap" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-    <h1>Memo＋（改ざん検知・鍵付き）</h1>
-    <div class="top-actions noprint">
-      <div class="view-toggle">
-        <button id="btnViewList" class="active">一覧</button>
-        <button id="btnViewCal">カレンダー</button>
-        <button id="btnViewStats">統計</button>
-      </div>
-      <button class="btn-outline" id="btnPrintConsult">相談用PDF</button>
-      <button class="btn-outline" id="btnExport">エクスポート</button>
-      <label class="btn-outline" style="display:inline-block; padding:8px 12px; cursor:pointer;">
-        インポート<input id="fileImport" type="file" accept="application/json" style="display:none">
-      </label>
-      <button id="themeToggle" class="theme-toggle" title="外観を切替">外観：エレガント</button>
-    </div>
-  </div>
-</header>
+<body class="bg-slate-50">
+  <div id="root"></div>
 
-<main class="wrap">
-  <div id="notice" class="notice noprint">
-    <strong>ご利用前にお読みください</strong><br>
-    本アプリは<b>端末内のブラウザに暗号化保存</b>します。サーバーには保存しません。<br>
-    端末やブラウザを変えるとデータは移行されません（<b>エクスポート/インポート</b>で移せます）。<br>
-    パスワードを忘れると復元できません。
-    <div style="text-align:right; margin-top:6px;">
-      <button id="noticeClose" class="btn-outline" style="padding:6px 10px;">× 閉じる</button>
-    </div>
-  </div>
+  <!-- =========================
+        アプリ本体（React）
+       ========================= -->
+  <script type="module">
+    const { useEffect, useState } = React;
 
-  <div class="print-only">
-    <div class="print-title">記録一覧（相談用）</div>
-    <div class="print-meta" id="printMeta"></div>
-  </div>
+    // ====== 共有ユーティリティ ======
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+    const LS_KEY = "memo_plus_store_v3";      // ローカル保存キー
+    const jpTime = (d) => new Date(d).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", hour12:false });
 
-  <div class="row">
-    <!-- 入力側（印刷除外） -->
-    <section class="card noprint">
-      <h2 style="margin:0 0 6px">📝 新規記録</h2>
-      <div class="muted">保存時にJSTタイムスタンプが自動付与。</div>
-
-      <label>タイトル（任意）</label>
-      <input id="title" placeholder="例：講習と言って外出 / 支出メモ / 会話の要点 など">
-      <label>カテゴリー</label>
-      <select id="cat">
-        <option>観察</option><option>発言</option><option>場所</option><option>支出</option><option>その他</option>
-        <option>経済的準備</option><option>子どもの様子</option><option>法的手続き</option><option>心の状態</option>
-      </select>
-      <label>本文</label>
-      <textarea id="note" placeholder="例：2025/03/12 18:42 自宅を出発。コンビニで◯◯を購入（レシート添付）。その後◯◯方面へ。帰宅は21:05。会話の要点：……"></textarea>
-
-      <label>今日の気持ち（任意）</label>
-      <div id="moodPick" class="mood-pick">
-        <button type="button" class="mood-btn" data-mood="happy">🙂 前向き</button>
-        <button type="button" class="mood-btn" data-mood="neutral">😐 ふつう</button>
-        <button type="button" class="mood-btn" data-mood="sad">😢 しんどい</button>
-        <button type="button" class="mood-btn" data-mood="angry">😡 いらだち</button>
-        <button type="button" class="mood-btn" data-mood="tired">😴 つかれ</button>
-      </div>
-
-      <label>画像（任意・PNG/JPEG・5MB以下）</label>
-      <input id="img" type="file" accept="image/png,image/jpeg">
-
-      <div style="display:flex; gap:8px; margin-top:12px;">
-        <button class="btn" id="btnAdd">今すぐ記録</button>
-        <span class="muted" id="msg"></span>
-      </div>
-
-      <hr style="margin:16px -16px; border:none; border-top:1px solid var(--border)">
-      <h2 style="margin:0 0 6px">🔐 ロック設定</h2>
-      <!-- ★スマホでも必ず出る（JSで常に描画） -->
-      <div id="lockPanel"></div>
-    </section>
-
-    <!-- 表示側 -->
-    <section class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center">
-        <h2 style="margin:0" id="viewTitle">📚 記録一覧（最新が下）</h2>
-        <span class="muted">合計 <span id="count">0</span> 件</span>
-      </div>
-      <div id="chainBadge" style="margin:6px 0 12px;"></div>
-
-      <ul id="list"></ul>
-
-      <!-- カレンダー -->
-      <div id="calendar" style="display:none;">
-        <div class="cal-head">
-          <button class="btn-outline" id="calPrev">〈 前の月</button>
-          <div id="calYM" style="font-weight:700;"></div>
-          <button class="btn-outline" id="calNext">次の月 〉</button>
-        </div>
-        <div class="cal-grid" id="calDow">
-          <div class="cal-dow">日</div><div class="cal-dow">月</div><div class="cal-dow">火</div>
-          <div class="cal-dow">水</div><div class="cal-dow">木</div><div class="cal-dow">金</div><div class="cal-dow">土</div>
-        </div>
-        <div class="cal-grid" id="calGrid"></div>
-      </div>
-
-      <!-- 統計 -->
-      <div id="stats" style="display:none;">
-        <div id="statsWrap"></div>
-      </div>
-    </section>
-  </div>
-</main>
-
-<!-- 初回パスワード設定ゲート（常に表示可能・スマホOK） -->
-<div id="gate" class="gate">
-  <div class="panel">
-    <h3 style="margin:0 0 8px">🔐 初回設定：パスワードの登録</h3>
-    <p class="muted" style="margin: 6px 0 12px">
-      本アプリは起動のたびにロックされます。利用開始にはパスワード設定が必要です（忘れると復元できません）。
-    </p>
-    <label>新しいパスワード</label>
-    <input id="gpw1" type="password" placeholder="••••••••">
-    <label>確認用パスワード</label>
-    <input id="gpw2" type="password" placeholder="••••••••">
-    <button id="gSet" class="btn" style="margin-top:10px; width:100%">設定して開始する</button>
-    <div id="gmsg" class="muted" style="margin-top:8px"></div>
-  </div>
-</div>
-
-<script>
-/* ========= 設定 ========= */
-const FORCE_LOCK = true;        // 起動ごとにロック
-const IDLE_MINUTES = 5;         // 自動ロック分
-let idleTimer = null;
-
-const enc = new TextEncoder(); const dec = new TextDecoder();
-const b64enc = b => btoa(String.fromCharCode(...b));
-const b64dec = s => new Uint8Array(atob(s).split("").map(c=>c.charCodeAt(0)));
-const toHex = buf => Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
-const jpTime = d => new Date(d).toLocaleString("ja-JP",{ timeZone:"Asia/Tokyo", hour12:false });
-const jpDate = d => new Date(d).toLocaleDateString("ja-JP",{ timeZone:"Asia/Tokyo" });
-const uuid = () => { const a=crypto.getRandomValues(new Uint8Array(16)); a[6]=(a[6]&0x0f)|0x40; a[8]=(a[8]&0x3f)|0x80;
-  return [...a].map((b,i)=>(i===4||i===6||i===8||i===10?"-":"")+b.toString(16).padStart(2,"0")).join(""); };
-const sha256Hex = async (text) => toHex(await crypto.subtle.digest("SHA-256", enc.encode(text)));
-function hexToBuf(h){ const a=(h.match(/.{1,2}/g)||[]).map(x=>parseInt(x,16)); return new Uint8Array(a); }
-
-/* ========= 暗号化/HMAC ========= */
-async function deriveKey(pw, salt){
-  const km = await crypto.subtle.importKey("raw", enc.encode(pw), {name:"PBKDF2"}, false, ["deriveKey"]);
-  return crypto.subtle.deriveKey({name:"PBKDF2", salt, iterations:120000, hash:"SHA-256"}, km, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
-}
-async function deriveHmac(pw, salt){
-  const km = await crypto.subtle.importKey("raw", enc.encode(pw), {name:"PBKDF2"}, false, ["deriveKey"]);
-  return crypto.subtle.deriveKey({name:"PBKDF2", salt, iterations:120000, hash:"SHA-256"}, km, {name:"HMAC", hash:"SHA-256", length:256}, false, ["sign","verify"]);
-}
-async function encryptJson(obj, pw){
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv   = crypto.getRandomValues(new Uint8Array(12));
-  const key  = await deriveKey(pw, salt);
-  const ct   = await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, enc.encode(JSON.stringify(obj)));
-  return { salt:b64enc(salt), iv:b64enc(iv), data:b64enc(new Uint8Array(ct)) };
-}
-async function decryptJson(payload, pw){
-  const key = await deriveKey(pw, b64dec(payload.salt));
-  const pt  = await crypto.subtle.decrypt({name:"AES-GCM", iv:b64dec(payload.iv)}, key, b64dec(payload.data));
-  return JSON.parse(dec.decode(new Uint8Array(pt)));
-}
-
-/* ========= ストア ========= */
-const LS_ENC="memo_plus_encrypted_v1"; const LS_PLAIN="memo_plus_plain_v1";
-let password=""; let store=null; let viewMode="list"; let calCursor=new Date();
-function emptyStore(){ return { version:1, requiresPassword:false, hmacSaltB64:b64enc(crypto.getRandomValues(new Uint8Array(16))), entries:[], images:{} }; }
-function entryMaterial(e){ return [e.id,e.createdAt,e.sealedAt??"",e.title,e.category,e.note,(e.imageId||""),(e.mood||"")].join("|"); }
-async function computeEntryHash(e, prev){ return sha256Hex(prev+"|"+entryMaterial(e)); }
-
-/* ========= 起動 ========= */
-async function load(){
-  const th = localStorage.getItem("memo_plus_theme") || "elegant";
-  document.documentElement.setAttribute("data-theme", th);
-  document.getElementById("themeToggle").textContent = th==="simple" ? "外観：シンプル" : "外観：エレガント";
-  if (localStorage.getItem("memo_plus_notice_closed")==="1"){ document.getElementById("notice").style.display="none"; }
-
-  const encPayload = localStorage.getItem(LS_ENC);
-  if (encPayload){ store=null; } else { const plain=localStorage.getItem(LS_PLAIN); store=plain?JSON.parse(plain):emptyStore(); }
-  render();
-}
-
-/* ========= 保存 ========= */
-async function persist(next){
-  if (next.requiresPassword){
-    if (!password){ setMsg("パスワード未入力のため保存できません。先にロック設定で設定してください。"); return; }
-    const encObj = await encryptJson(next, password);
-    localStorage.removeItem(LS_PLAIN);
-    localStorage.setItem(LS_ENC, JSON.stringify(encObj));
-  } else {
-    localStorage.removeItem(LS_ENC);
-    localStorage.setItem(LS_PLAIN, JSON.stringify(next));
-  }
-  store=next; render();
-}
-
-/* ========= UI参照 ========= */
-const el=id=>document.getElementById(id);
-const $title=el("title"), $cat=el("cat"), $note=el("note"), $img=el("img");
-const $list=el("list"), $count=el("count"), $badge=el("chainBadge"), $msg=el("msg");
-const $viewTitle=el("viewTitle");
-
-/* ムード */
-const $moodPick = document.getElementById("moodPick");
-let currentMood = null;
-$moodPick.querySelectorAll(".mood-btn").forEach(btn=>{
-  btn.onclick = ()=>{ $moodPick.querySelectorAll(".mood-btn").forEach(b=>b.classList.remove("active")); btn.classList.add("active"); currentMood = btn.dataset.mood; };
-});
-function mindMessage(m){ const map={happy:["前向きに過ごせたね！"],neutral:["淡々と積み上げられた。"],sad:["しんどい日も残せた、えらい。"],angry:["境界線を守れたね。"],tired:["おつかれさま。今日は休もう。"],def:["記録ありがとう。小さな一歩。"]}; const arr=map[m]||map.def; return arr[Math.floor(Math.random()*arr.length)]; }
-
-/* ========= ロックUI ========= */
-function setMsg(t){ $msg.textContent=t||""; }
-function renderLock(){
-  const p=el("lockPanel"); p.innerHTML="";
-  if (store===null){ // 解錠
-    const w=document.createElement("div");
-    w.innerHTML=`<div class="muted">暗号化データがあります。パスワードで解錠してください。</div>
-      <label>パスワード</label><input id="pwIn" type="password" placeholder="••••••••">
-      <button class="btn" id="btnUnlock" style="margin-top:8px">解錠する</button>
-      <div class="muted" style="margin-top:8px">※ 忘れると復元できません。</div>`;
-    p.appendChild(w);
-    el("btnUnlock").onclick=async()=>{
-      try{ const payload=JSON.parse(localStorage.getItem(LS_ENC)); const data=await decryptJson(payload, el("pwIn").value);
-        password=el("pwIn").value; store=data; render();
-      }catch{ setMsg("パスワードが違う可能性があります"); }
-    };
-    // お守り：初期化ボタン
-    const fix=document.createElement('button'); fix.className='btn-outline'; fix.style='margin-top:8px'; fix.textContent='表示がおかしい時の初期化';
-    fix.onclick = async()=>{ try{ localStorage.removeItem(LS_ENC); localStorage.removeItem(LS_PLAIN); if('caches' in window){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } } finally { location.reload(); } };
-    p.appendChild(fix);
-    return;
-  }
-
-  if (!store.requiresPassword){ // 初回設定誘導
-    const w=document.createElement("div");
-    w.innerHTML=`<div class="muted">現在：<b>パスワード未設定</b>（平文保存）</div>
-      <label>新しいパスワード</label><input id="pw1" type="password">
-      <label>確認用パスワード</label><input id="pw2" type="password">
-      <button class="btn" id="btnSetPw" style="margin-top:8px">パスワードを設定して暗号化保存に切替</button>`;
-    p.appendChild(w);
-    el("btnSetPw").onclick=async()=>{
-      const a=el("pw1").value,b=el("pw2").value; if(!a||a!==b){ setMsg("パスワードが一致しません"); return; }
-      password=a; await persist({ ...(store||emptyStore()), requiresPassword:true });
-      setMsg("暗号化しました。以後は解錠が必要です。");
-    };
-  }else{
-    const w=document.createElement("div");
-    w.innerHTML=`<div class="muted">現在：<b>暗号化保存</b>（AES-GCM）</div>
-      <button class="btn-outline" id="btnLock" style="margin-top:8px">今すぐ画面をロック</button>`;
-    p.appendChild(w);
-    el("btnLock").onclick=()=>{ lockNow(); };
-  }
-}
-
-/* 初回パスワード設定ゲート */
-function needGate(){ return FORCE_LOCK && store && !store.requiresPassword; }
-function showGate(show){ document.getElementById("gate").style.display = show ? "flex" : "none"; }
-function bindGate(){
-  document.getElementById("gSet").onclick = async ()=>{
-    const a = document.getElementById("gpw1").value;
-    const b = document.getElementById("gpw2").value;
-    const gmsg = document.getElementById("gmsg");
-    if (!a || a!==b){ gmsg.textContent="パスワードが一致しません"; return; }
-    password = a; await persist({ ...(store||emptyStore()), requiresPassword:true });
-    showGate(false); setMsg("暗号化しました。以後は解錠が必要です。");
-  };
-}
-
-/* ========= チェーン検証 ========= */
-async function verifyChain(){
-  if (!store) return {ok:true};
-  let prev="GENESIS";
-  for (let i=0;i<store.entries.length;i++){
-    const e=store.entries[i]; const expected=await computeEntryHash(e, prev);
-    if (expected!==e.hash) return {ok:false, idx:i, reason:"ハッシュ不一致（改ざんの可能性）"};
-    prev=e.hash;
-  }
-  return {ok:true};
-}
-
-/* ========= CRUD ========= */
-async function addEntry(){
-  if (store===null){ setMsg("まずパスワードを入れて解錠してください"); return; }
-  if (!store.requiresPassword && FORCE_LOCK){ setMsg("まずロック設定でパスワードを設定してください"); showGate(true); return; }
-
-  const title=$title.value.trim(), cat=$cat.value, note=$note.value.trim();
-  let imageId=null; const f=$img.files[0];
-  if (!title && !note && !f){ setMsg("内容を入力してください"); return; }
-  if (f){
-    if (!/image\/(png|jpeg)/.test(f.type)) { setMsg("PNG/JPEGのみ許可"); return; }
-    if (f.size>5*1024*1024){ setMsg("画像は5MB以下にしてください"); return; }
-    const dataURL=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); });
-    imageId=uuid(); store.images[imageId]=dataURL;
-  }
-  const now=new Date().toISOString();
-  const prev=store.entries[store.entries.length-1]?.hash ?? "GENESIS";
-  const draft={ id:uuid(), createdAt:now, sealedAt:null, title, category:cat, note, imageId, mood: currentMood || null, prevHash:prev, hash:"" };
-  draft.hash=await computeEntryHash(draft, prev);
-  await persist({ ...store, entries:[...store.entries, draft] });
-  $title.value=""; $note.value=""; $img.value=""; $moodPick.querySelectorAll(".mood-btn").forEach(b=>b.classList.remove("active")); currentMood=null;
-  setMsg(mindMessage(draft.mood));
-}
-async function editEntry(id, fields){
-  if (!store?.requiresPassword && FORCE_LOCK){ setMsg("まずロック設定でパスワードを設定してください"); showGate(true); return; }
-  const idx=store.entries.findIndex(e=>e.id===id); if (idx<0) return;
-  const t=store.entries[idx]; if (t.sealedAt){ setMsg("封印済みは編集できません"); return; }
-  const arr=[...store.entries]; arr[idx]={ ...t, ...fields };
-  let prev="GENESIS"; for (let i=0;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash=await computeEntryHash(arr[i], prev); prev=arr[i].hash; }
-  await persist({ ...store, entries:arr });
-}
-async function sealEntry(id){
-  if (!store?.requiresPassword && FORCE_LOCK){ setMsg("まずロック設定でパスワードを設定してください"); showGate(true); return; }
-  const idx=store.entries.findIndex(e=>e.id===id); if (idx<0) return;
-  if (store.entries[idx].sealedAt) return;
-  const arr=[...store.entries]; arr[idx]={ ...store.entries[idx], sealedAt:new Date().toISOString() };
-  let prev=idx===0 ? "GENESIS" : arr[idx-1].hash;
-  for (let i=idx;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash=await computeEntryHash(arr[i], prev); prev=arr[i].hash; }
-  await persist({ ...store, entries:arr });
-}
-async function removeEntry(id){
-  if (!store?.requiresPassword && FORCE_LOCK){ setMsg("まずロック設定でパスワードを設定してください"); showGate(true); return; }
-  const idx=store.entries.findIndex(e=>e.id===id); if (idx<0) return;
-  if (store.entries[idx].sealedAt){ setMsg("封印済みは削除できません"); return; }
-  const arr=store.entries.filter(e=>e.id!==id);
-  let prev="GENESIS"; for (let i=0;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash=await computeEntryHash(arr[i], prev); prev=arr[i].hash; }
-  await persist({ ...store, entries:arr });
-}
-
-/* ========= 印刷メタ ========= */
-function computeRange(){ if (!store || !store.entries.length) return { from:"—", to:"—" };
-  const sorted=[...store.entries].sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
-  return { from: jpDate(sorted[0].createdAt), to: jpDate(sorted[sorted.length-1].createdAt) }; }
-function preparePrintHeader(){ const {from,to}=computeRange(); el("printMeta").textContent=`印刷日：${jpDate(new Date())}　記録件数：${store?store.entries.length:0}　期間：${from} 〜 ${to}`; }
-
-/* ========= 一覧描画 ========= */
-async function verifyChainBadge(){ const vr=await verifyChain(); el("chainBadge").innerHTML = vr.ok ? `<span class="chip good">改ざん検知: 異常なし</span>` : `<span class="chip bad">チェーン破損: #${vr.idx+1} ${vr.reason}</span>`; }
-async function renderList(){
-  const $list=el("list"); $list.innerHTML="";
-  if (!store){ el("count").textContent="0"; el("chainBadge").innerHTML=""; return; }
-  el("count").textContent=store.entries.length; verifyChainBadge();
-  for (const e of store.entries){
-    const li=document.createElement("li"); li.className="item";
-    li.innerHTML=`<div class="meta">作成: ${jpTime(e.createdAt)}${e.sealedAt?` ／ 封印: ${jpTime(e.sealedAt)}`:""}</div>
-      <div class="chip">${e.category}</div>
-      <div style="font-weight:600; margin-top:6px">${e.title||"（無題）"}</div>
-      ${e.mood?`<div class="meta">気持ち：${{happy:"🙂 前向き",neutral:"😐 ふつう",sad:"😢 しんどい",angry:"😡 いらだち",tired:"😴 つかれ"}[e.mood]}</div>`:""}
-      ${e.imageId && store.images[e.imageId] ? `<img class="preview" src="${store.images[e.imageId]}" alt="添付画像">` : ""}
-      <div style="white-space:pre-wrap; margin-top:6px">${e.note||""}</div>`;
-    const ops=document.createElement("div"); ops.className="noprint"; ops.style="display:flex;gap:8px;margin-top:8px";
-    if (!e.sealedAt){
-      const b1=document.createElement("button"); b1.className="btn-outline"; b1.textContent="編集";
-      b1.onclick=async()=>{ const t=prompt("タイトルを編集", e.title||""); if(t===null)return; const n=prompt("本文を編集", e.note||""); if(n===null)return; await editEntry(e.id,{title:t,note:n}); };
-      const b2=document.createElement("button"); b2.className="btn-outline"; b2.textContent="削除"; b2.onclick=()=>{ if(confirm("削除しますか？")) removeEntry(e.id); };
-      const b3=document.createElement("button"); b3.className="btn-seal"; b3.textContent="封印（確定）"; b3.onclick=()=>sealEntry(e.id);
-      ops.append(b1,b2,b3);
-    }else{
-      const s=document.createElement("span"); s.className="chip good"; s.textContent="封印済み・編集不可"; ops.appendChild(s);
+    async function sha256Hex(text){
+      const hash = await crypto.subtle.digest("SHA-256", enc.encode(text));
+      return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,"0")).join("");
     }
-    li.appendChild(ops);
-    const dbg=document.createElement("div"); dbg.className="meta noprint"; dbg.style="margin-top:6px"; dbg.textContent=`hash:${e.hash.slice(0,16)}…`;
-    li.appendChild(dbg);
-    $list.appendChild(li);
-  }
-}
-
-/* ========= カレンダー/統計 ========= */
-function ymdKey(d){ return new Date(d).toLocaleDateString("ja-JP",{ timeZone:"Asia/Tokyo", year:"numeric", month:"2-digit", day:"2-digit"}); }
-function monthMeta(date){ const y=date.getFullYear(), m=date.getMonth(); const first=new Date(y,m,1); const firstDow=(first.getDay()+7)%7; const daysInMonth=new Date(y,m+1,0).getDate(); const prevDays=new Date(y,m,0).getDate(); return {y,m,firstDow,daysInMonth,prevDays}; }
-function groupByDate(entries){ const map={}; for(const e of entries){ const k=ymdKey(e.createdAt); (map[k] ||= []).push(e); } return map; }
-function renderCalendar(){
-  const grid=el("calGrid"), ymEl=el("calYM"); grid.innerHTML="";
-  if (!store){ ymEl.textContent=""; return; }
-  const meta=monthMeta(calCursor); ymEl.textContent=`${meta.y}年 ${meta.m+1}月`;
-  const grouped=groupByDate(store.entries);
-  const cells=[]; for(let i=0;i<meta.firstDow;i++){ const d=meta.prevDays-(meta.firstDow-1-i); cells.push({dim:true,date:new Date(meta.y,meta.m-1,d)}); }
-  for(let d=1; d<=meta.daysInMonth; d++){ cells.push({dim:false,date:new Date(meta.y,meta.m,d)}); }
-  while(cells.length%7!==0) cells.push({dim:true,date:new Date(meta.y,meta.m+1,cells.length)});
-  for(const c of cells){
-    const cell=document.createElement("div"); cell.className="cal-cell"+(c.dim?" dim":"");
-    const key=ymdKey(c.date); const y=c.date.getFullYear(), m=c.date.getMonth()+1, d=c.date.getDate();
-    const head=document.createElement("div"); head.className="cal-date"; head.innerHTML=`<span>${m}/${d}</span>${grouped[key]?`<span class="dot"></span>`:""}`; cell.appendChild(head);
-    if(grouped[key]){
-      const badges=document.createElement("div"); badges.className="cal-badges";
-      const cats=new Set(grouped[key].map(e=>e.category)); for(const cat of cats){ const b=document.createElement("span"); b.className="badge"; b.textContent=cat; badges.appendChild(b); }
-      cell.appendChild(badges);
-      const list=document.createElement("div"); list.className="cal-list";
-      for(const e of grouped[key].slice(0,4)){ const div=document.createElement("div"); div.className="cal-evt"; div.title=e.title||e.note||""; div.textContent=(e.title||e.note||"（無題）"); list.appendChild(div); }
-      if(grouped[key].length>4){ const more=document.createElement("div"); more.className="cal-evt"; more.textContent=`…他 ${grouped[key].length-4} 件`; list.appendChild(more); }
-      cell.onclick=()=>{ viewMode="list"; switchView(); store.entries.sort((a,b)=> (ymdKey(b.createdAt)===key)-(ymdKey(a.createdAt)===key) || a.createdAt.localeCompare(b.createdAt) ); render(); window.scrollTo({top:0,behavior:"smooth"}); };
-      cell.appendChild(list);
+    function uuid(){
+      const a=crypto.getRandomValues(new Uint8Array(16));
+      a[6]=(a[6]&0x0f)|0x40; a[8]=(a[8]&0x3f)|0x80;
+      return [...a].map((b,i)=>(i===4||i===6||i===8||i===10?"-":"")+b.toString(16).padStart(2,"0")).join("");
     }
-    grid.appendChild(cell);
-  }
-}
-function summarize(){
-  const weeks = new Map(); const moodCount = { happy:0, neutral:0, sad:0, angry:0, tired:0 };
-  if (!store) return { weeks:[], moodCount };
-  for (const e of store.entries){ const dt=new Date(e.createdAt); const d=new Date(dt.getFullYear(),dt.getMonth(),dt.getDate()); const dow=(d.getDay()+6)%7; const monday=new Date(d); monday.setDate(d.getDate()-dow); const k=monday.toISOString().slice(0,10);
-    weeks.set(k,(weeks.get(k)||0)+1); if (e.mood) moodCount[e.mood] = (moodCount[e.mood]||0)+1; }
-  const arr=[...weeks.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-8);
-  return { weeks:arr, moodCount };
-}
-function renderStats(){
-  const wrap = document.getElementById("statsWrap");
-  wrap.innerHTML = "";
-  const { weeks, moodCount } = summarize();
-  const maxv = Math.max(1, ...weeks.map(w=>w[1]));
-  const W=520,H=160,P=24; let bars="";
-  weeks.forEach(([wk,cnt],i)=>{ const bw=(W-2*P)/Math.max(weeks.length,1)*0.7; const gap=(W-2*P)/Math.max(weeks.length,1); const x=P + i*gap + (gap-bw)/2; const h=(H-2*P) * (cnt/maxv); const y=H-P - h;
-    bars += `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="6" ry="6" fill="#0f172a"></rect>
-             <text x="${x+bw/2}" y="${H-P+12}" font-size="10" text-anchor="middle" fill="#475569">${wk.slice(5)}</text>
-             <text x="${x+bw/2}" y="${y-4}" font-size="11" text-anchor="middle" fill="#0f172a">${cnt}</text>`; });
-  const svgBar = `<svg width="${W}" height="${H}" role="img" aria-label="週別記録数"><rect x="0" y="0" width="${W}" height="${H}" fill="white" stroke="#e5e7eb"/><g>${bars}</g></svg>`;
-  const total = Object.values(moodCount).reduce((a,b)=>a+b,0) || 1;
-  const colors = { happy:"#16a34a", neutral:"#0284c7", sad:"#7c3aed", angry:"#dc2626", tired:"#ca8a04" };
-  const R=60, CX=90, CY=90, CIRC=2*Math.PI*R; let acc=0, arcs="";
-  for (const k of ["happy","neutral","sad","angry","tired"]){ const frac=(moodCount[k]||0)/total; const len=CIRC*frac;
-    arcs += `<circle r="${R}" cx="${CX}" cy="${CY}" fill="transparent" stroke="${colors[k]}" stroke-width="16" stroke-dasharray="${len} ${CIRC-len}" transform="rotate(-90 ${CX} ${CY})" stroke-dashoffset="${-acc}"></circle>`; acc += len; }
-  wrap.innerHTML = `<div class="muted" style="margin-bottom:8px">※ 直近8週の記録傾向とムード内訳</div>
-    <div class="card" style="margin-bottom:12px"><h3 style="margin:0 0 8px">週ごとの記録件数</h3>${svgBar}</div>
-    <div class="card"><h3 style="margin:0 0 8px">ムードの内訳</h3>
-      <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
-        <svg width="180" height="180" role="img" aria-label="ムード比率">
-          <circle r="${R}" cx="${CX}" cy="${CY}" fill="transparent" stroke="#e5e7eb" stroke-width="16"></circle>${arcs}
-        </svg>
-        <div>${Object.entries(moodCount).map(([k,v])=>`<div style="display:flex;gap:6px;align-items:center"><span style="width:10px;height:10px;border-radius:2px;background:${colors[k]}"></span><span style="font-size:12px;color:#334155">${{happy:"🙂前向き",neutral:"😐ふつう",sad:"😢しんどい",angry:"😡いらだち",tired:"😴つかれ"}[k]}：${v}</span></div>`).join("")}</div>
-      </div>
-    </div>`;
-}
 
-/* ========= ビュー切替 ========= */
-function switchView(){
-  const vList = el("btnViewList"), vCal = el("btnViewCal"), vStats = el("btnViewStats");
-  const list = el("list"), cal = el("calendar"), stats = el("stats");
-  vList.classList.remove("active"); vCal.classList.remove("active"); vStats.classList.remove("active");
-  list.style.display = "none"; cal.style.display = "none"; stats.style.display = "none";
-  if (viewMode==="list"){ $viewTitle.textContent="📚 記録一覧（最新が下）"; list.style.display=""; vList.classList.add("active"); }
-  else if (viewMode==="cal"){ $viewTitle.textContent="📅 カレンダー"; cal.style.display=""; vCal.classList.add("active"); }
-  else { $viewTitle.textContent="📈 統計（直近8週）"; stats.style.display=""; vStats.classList.add("active"); }
-}
-function render(){ renderLock(); switchView(); renderList(); if(viewMode==="cal") renderCalendar(); if(viewMode==="stats") renderStats(); renderGateIfNeeded(); }
+    // === 暗号化（AES-GCM + PBKDF2） ===
+    const b64enc = (bytes)=> btoa(String.fromCharCode(...bytes));
+    const b64dec = (b64)=> new Uint8Array(atob(b64).split("").map(c=>c.charCodeAt(0)));
+    async function deriveKey(password, salt){
+      const km = await crypto.subtle.importKey("raw", enc.encode(password), {name:"PBKDF2"}, false, ["deriveKey"]);
+      return crypto.subtle.deriveKey(
+        {name:"PBKDF2", salt, iterations:120000, hash:"SHA-256"},
+        km, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]
+      );
+    }
+    async function encryptJson(obj, password){
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const iv   = crypto.getRandomValues(new Uint8Array(12));
+      const key  = await deriveKey(password, salt);
+      const ct   = await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, enc.encode(JSON.stringify(obj)));
+      return { salt: b64enc(salt), iv: b64enc(iv), data: b64enc(new Uint8Array(ct)) };
+    }
+    async function decryptJson(payload, password){
+      const salt=b64dec(payload.salt), iv=b64dec(payload.iv), ct=b64dec(payload.data);
+      const key = await deriveKey(password, salt);
+      const pt  = await crypto.subtle.decrypt({name:"AES-GCM", iv}, key, ct);
+      return JSON.parse(dec.decode(new Uint8Array(pt)));
+    }
 
-/* ========= 自動ロック ========= */
-function lockNow(){ store = null; password = ""; render(); }
-function resetIdle(){ clearTimeout(idleTimer); idleTimer = setTimeout(lockNow, IDLE_MINUTES * 60 * 1000); }
-["click","keydown","mousemove","touchstart"].forEach(ev=>{ window.addEventListener(ev, resetIdle, {passive:true}); });
-document.addEventListener("visibilitychange", ()=>{ if (document.hidden) lockNow(); });
+    // ====== データ形 ======
+    function emptyStore(){ return { version:3, requiresPassword:false, entries:[], images:{} }; }
+    function entryMaterial(e){ return [e.id,e.createdAt,e.sealedAt??"",e.title,e.category,e.note,(e.imageId||"")].join("|"); }
 
-/* ========= いろいろイベント ========= */
-el("btnAdd").onclick=addEntry;
-el("btnExport").onclick=()=>{ if(!store){ setMsg("解錠してからエクスポートしてください"); return; } const blob=new Blob([JSON.stringify(store,null,2)],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`memo-plus-${new Date().toISOString().replace(/[:.]/g,"-")}.json`; a.click(); URL.revokeObjectURL(url); };
-el("fileImport").onchange=(e)=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=async()=>{ try{ const obj=JSON.parse(r.result); if(typeof obj.version!=="number"||!Array.isArray(obj.entries)) throw 0; await persist(obj); setMsg("インポートしました"); }catch{ setMsg("インポート失敗"); } }; r.readAsText(f); };
-el("btnViewList").onclick=()=>{ viewMode="list"; switchView(); renderList(); };
-el("btnViewCal").onclick =()=>{ viewMode="cal";  switchView(); renderCalendar(); };
-el("btnViewStats").onclick=()=>{ viewMode="stats"; switchView(); renderStats(); };
-el("calPrev").onclick=()=>{ calCursor=new Date(calCursor.getFullYear(), calCursor.getMonth()-1, 1); renderCalendar(); };
-el("calNext").onclick=()=>{ calCursor=new Date(calCursor.getFullYear(), calCursor.getMonth()+1, 1); renderCalendar(); };
-el("themeToggle").onclick=()=>{ const cur=document.documentElement.getAttribute("data-theme"); const next=cur==="simple" ? "elegant" : "simple"; document.documentElement.setAttribute("data-theme", next); el("themeToggle").textContent = next==="simple" ? "外観：シンプル" : "外観：エレガント"; localStorage.setItem("memo_plus_theme", next); };
-el("noticeClose").onclick=()=>{ el("notice").style.display="none"; localStorage.setItem("memo_plus_notice_closed","1"); };
-el("btnPrintConsult").onclick=()=>{ preparePrintHeader(); window.print(); };
+    // ====== ルートApp ======
+    function App(){
+      const [store,setStore]=useState(null);
+      const [password,setPassword]=useState("");
+      const [locked,setLocked]=useState(false);
+      const [hasEncrypted,setHasEncrypted]=useState(false);
+      const [msg,setMsg]=useState("");
 
-/* ========= ゲート制御 ========= */
-function renderGateIfNeeded(){ bindGate(); if (FORCE_LOCK && store && !store.requiresPassword) showGate(true); else showGate(false); }
+      // 絞り込み・検索UI
+      const [filterCat,setFilterCat]=useState("all");
+      const [searchMode,setSearchMode]=useState("AND");
+      const [searchText,setSearchText]=useState("");
+      const [sortMode,setSortMode]=useState("newest");
 
-/* ========= 起動 ========= */
-window.addEventListener('load', ()=>{ resetIdle(); if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js')); } });
-load();
-</script>
+      // 起動時：暗号化保存があればロック画面から
+      useEffect(()=>{
+        const encPayload = localStorage.getItem(LS_KEY+"_enc");
+        if (encPayload){ setHasEncrypted(true); setLocked(true); }
+        else{
+          const plain = localStorage.getItem(LS_KEY);
+          setStore(plain? JSON.parse(plain): emptyStore());
+        }
+      },[]);
+      useEffect(()=>{ if (hasEncrypted){ setLocked(true); } },[hasEncrypted]);
+
+      // 保存
+      async function persist(next){
+        if (next.requiresPassword){
+          if (!password){ setMsg("パスワード未入力。ロック設定でパスワードを入れてね。"); return; }
+          const encObj = await encryptJson(next, password);
+          localStorage.removeItem(LS_KEY);
+          localStorage.setItem(LS_KEY+"_enc", JSON.stringify(encObj));
+          setHasEncrypted(true);
+        }else{
+          localStorage.removeItem(LS_KEY+"_enc");
+          localStorage.setItem(LS_KEY, JSON.stringify(next));
+          setHasEncrypted(false);
+        }
+        setStore(next);
+      }
+      async function unlock(pw){
+        try{
+          const payload = JSON.parse(localStorage.getItem(LS_KEY+"_enc"));
+          const data = await decryptJson(payload, pw);
+          setPassword(pw); setStore(data); setLocked(false); setMsg("");
+        }catch{ setMsg("パスワードが違う可能性があります"); }
+      }
+
+      // 画像登録（PNG/JPEG 5MBまで）
+      async function addImage(file){
+        if (!file) return { id:null };
+        if (!/image\/(png|jpeg)/.test(file.type)) { setMsg("PNG/JPEGのみ許可"); return { id:null }; }
+        if (file.size > 5*1024*1024) { setMsg("画像は5MB以下にしてね"); return { id:null }; }
+        const reader = new FileReader();
+        const dataURL = await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); });
+        const id = uuid();
+        const next = { ...store, images: { ...(store.images||{}), [id]: dataURL } };
+        await persist(next);
+        return { id };
+      }
+
+      // 追加・編集・封印・削除
+      async function addEntry({title,category,note,imageId}){
+        const now = new Date().toISOString();
+        const prev = store.entries[store.entries.length-1]?.hash ?? "GENESIS";
+        const draft = { id: uuid(), createdAt: now, sealedAt:null, title:title.trim(), category, note, imageId:imageId||null, prevHash: prev, hash:"" };
+        draft.hash = await sha256Hex(prev+"|"+entryMaterial(draft));
+        const next = { ...store, entries:[...store.entries,draft] };
+        await persist(next);
+      }
+      async function editEntry(id, fields){
+        const idx = store.entries.findIndex(e=>e.id===id); if (idx<0) return; if (store.entries[idx].sealedAt) return;
+        const arr=[...store.entries]; arr[idx] = { ...arr[idx], ...fields };
+        let prev = "GENESIS";
+        for (let i=0;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash = await sha256Hex(prev+"|"+entryMaterial(arr[i])); prev=arr[i].hash; }
+        await persist({ ...store, entries: arr });
+      }
+      async function sealEntry(id){
+        const idx = store.entries.findIndex(e=>e.id===id); if (idx<0) return; if (store.entries[idx].sealedAt) return;
+        const arr=[...store.entries]; arr[idx] = { ...arr[idx], sealedAt: new Date().toISOString() };
+        let prev = "GENESIS";
+        for (let i=0;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash = await sha256Hex(prev+"|"+entryMaterial(arr[i])); prev=arr[i].hash; }
+        await persist({ ...store, entries: arr });
+      }
+      async function removeEntry(id){
+        const idx = store.entries.findIndex(e=>e.id===id); if (idx<0) return; if (store.entries[idx].sealedAt) return;
+        const arr = store.entries.filter(e=>e.id!==id);
+        let prev = "GENESIS";
+        for (let i=0;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash = await sha256Hex(prev+"|"+entryMaterial(arr[i])); prev=arr[i].hash; }
+        await persist({ ...store, entries: arr });
+      }
+
+      // エクスポート／インポート
+      function exportJson(){
+        const blob=new Blob([JSON.stringify(store,null,2)],{type:"application/json"});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement("a");
+        a.href=url; a.download=`memo-plus-${new Date().toISOString().replace(/[:.]/g,"-")}.json`;
+        a.click(); URL.revokeObjectURL(url);
+      }
+      function importJson(file){
+        const r=new FileReader();
+        r.onload=async()=>{ try{ const obj=JSON.parse(r.result); if(!Array.isArray(obj.entries)) throw 0; await persist(obj); }catch{ setMsg("インポート失敗"); } };
+        r.readAsText(file);
+      }
+
+      // 絞り込み・検索・並び替え
+      function filteredEntries(){
+        let arr = [...store.entries];
+        if(filterCat!=="all"){ arr = arr.filter(e=>e.category===filterCat); }
+        if(searchText.trim()){
+          const words = searchText.trim().split(/\s+/);
+          if(searchMode==="AND"){
+            arr = arr.filter(e=>words.every(w=> (e.title+e.note).includes(w)));
+          }else{
+            arr = arr.filter(e=>words.some(w=> (e.title+e.note).includes(w)));
+          }
+        }
+        if(sortMode==="newest"){ arr.sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt)); }
+        if(sortMode==="oldest"){ arr.sort((a,b)=> new Date(a.createdAt)-new Date(b.createdAt)); }
+        return arr;
+      }
+
+      // ====== 画面：ロック解除 ======
+      if (locked && hasEncrypted){
+        return React.createElement('div',{className:"min-h-screen bg-slate-50 p-6"},
+          React.createElement('div',{className:"max-w-xl mx-auto bg-white rounded-2xl shadow p-6"},
+            React.createElement('h1',{className:"text-2xl font-bold mb-2"},"🔐 Memo＋（鍵付き）"),
+            React.createElement('p',{className:"text-sm text-slate-600 mb-6"},"端末内の暗号化データがあります。パスワードで解錠してください。"),
+            React.createElement('input',{type:"password",className:"w-full border rounded-xl p-3",placeholder:"••••••••",onChange:e=>setPassword(e.target.value)}),
+            React.createElement('button',{onClick:()=>unlock(password),className:"mt-4 w-full rounded-xl p-3 bg-slate-900 text-white"},"解錠する"),
+            msg && React.createElement('p',{className:"mt-3 text-red-600 text-sm"},msg)
+          ));
+      }
+      if (!store) return React.createElement('div',{className:"p-6"},"読み込み中…");
+
+      // ====== 画面：通常 ======
+      return React.createElement(React.Fragment,null,
+        React.createElement('header',{className:"sticky top-0 bg-white/90 border-b z-10"},
+          React.createElement('div',{className:"max-w-5xl mx-auto px-4 py-3 flex flex-wrap gap-2 items-center justify-between"},
+            React.createElement('h1',{className:"font-bold text-xl"},"Memo＋（改ざん検知・鍵付き）"),
+            React.createElement('div',{className:"flex flex-wrap gap-2"},
+              React.createElement('button',{className:"px-3 py-2 rounded-lg border",onClick:()=>window.print()},"相談用PDF"),
+              React.createElement('button',{className:"px-3 py-2 rounded-lg border",onClick:exportJson},"エクスポート"),
+              React.createElement('label',{className:"px-3 py-2 rounded-lg border cursor-pointer"},"インポート",
+                React.createElement('input',{type:"file",accept:"application/json",className:"hidden",onChange:e=>e.target.files?.[0]&&importJson(e.target.files[0])})
+              )
+            )
+          )
+        ),
+
+        React.createElement('main',{className:"max-w-5xl mx-auto p-4 grid gap-6 sm:grid-cols-5"},
+          // 左：新規登録＆ロック
+          React.createElement('div',{className:"sm:col-span-2"},
+            React.createElement('section',{className:"bg-white rounded-2xl shadow p-4"},
+              React.createElement('h2',{className:"font-semibold mb-3"},"📝 新規記録"),
+              React.createElement(NewEntryForm,{ onSubmit: async ({title,category,note,file})=>{
+                let imageId=null; if(file){ const r=await addImage(file); imageId=r.id; }
+                await addEntry({title,category,note,imageId});
+              }})
+            ),
+            React.createElement('section',{className:"bg-white rounded-2xl shadow p-4 mt-4"},
+              React.createElement('h2',{className:"font-semibold mb-3"},"🔐 ロック設定"),
+              React.createElement(LockPanel,{store,setStore,password,setPassword,persist,setMsg})
+            ),
+            msg && React.createElement('div',{className:"mt-4 text-sm text-red-600"},msg)
+          ),
+
+          // 右：一覧（絞り込み・検索・並び替え）
+          React.createElement('div',{className:"sm:col-span-3"},
+            React.createElement('section',{className:"bg-white rounded-2xl shadow p-4"},
+              React.createElement('div',{className:"flex flex-wrap gap-2 mb-3"},
+                React.createElement('select',{value:filterCat,onChange:e=>setFilterCat(e.target.value),className:"border rounded-lg p-2"},
+                  React.createElement('option',{value:"all"},"すべて"),
+                  ['観察','会話','支出','場所','その他'].map(c=>React.createElement('option',{key:c,value:c},c))
+                ),
+                React.createElement('select',{value:searchMode,onChange:e=>setSearchMode(e.target.value),className:"border rounded-lg p-2"},
+                  React.createElement('option',{value:"AND"},"AND検索"),
+                  React.createElement('option',{value:"OR"},"OR検索")
+                ),
+                React.createElement('input',{type:"text",placeholder:"検索ワード（スペース区切り）",value:searchText,onChange:e=>setSearchText(e.target.value),className:"flex-1 border rounded-lg p-2"}),
+                React.createElement('select',{value:sortMode,onChange:e=>setSortMode(e.target.value),className:"border rounded-lg p-2"},
+                  React.createElement('option',{value:"newest"},"新しい順"),
+                  React.createElement('option',{value:"oldest"},"古い順")
+                )
+              ),
+              filteredEntries().length===0
+                ? React.createElement('p',{className:"text-sm text-slate-500"},"該当する記録はありません。")
+                : React.createElement('ul',{className:"space-y-3"},
+                    filteredEntries().map((e)=>React.createElement(EntryCard,{key:e.id,e,images:store.images,editEntry,sealEntry,removeEntry}))
+                  )
+            )
+          )
+        )
+      );
+    }
+
+    // ====== フォーム ======
+    function NewEntryForm({ onSubmit }){
+      const [title,setTitle]=useState("");
+      const [category,setCategory]=useState("観察");
+      const [note,setNote]=useState("");
+      const [file,setFile]=useState(null);
+      const handle=async(e)=>{ e.preventDefault(); if(!title.trim()&&!note.trim()&&!file) return; await onSubmit({title,category,note,file}); setTitle(""); setCategory("観察"); setNote(""); setFile(null); e.target.reset(); };
+      return React.createElement('form',{onSubmit:handle,className:"space-y-3"},
+        React.createElement('div',null,
+          React.createElement('label',{className:"block text-sm font-medium mb-1"},"タイトル（任意）"),
+          React.createElement('input',{value:title,onChange:e=>setTitle(e.target.value),className:"w-full border rounded-xl p-3",placeholder:"例：講習と言って外出 / 支出メモ / 会話の要点 など"})
+        ),
+        React.createElement('div',null,
+          React.createElement('label',{className:"block text-sm font-medium mb-1"},"カテゴリー"),
+          React.createElement('select',{value:category,onChange:e=>setCategory(e.target.value),className:"w-full border rounded-xl p-3"}, ['観察','会話','支出','場所','その他'].map(x=>React.createElement('option',{key:x,value:x},x)))
+        ),
+        React.createElement('div',null,
+          React.createElement('label',{className:"block text-sm font-medium mb-1"},"本文"),
+          React.createElement('textarea',{value:note,onChange:e=>setNote(e.target.value),className:"w-full border rounded-xl p-3 h-32",placeholder:`例：${new Date().toLocaleString('ja-JP',{ timeZone:'Asia/Tokyo', hour12:false })} 自宅を出発。コンビニで◯◯を購入（レシート添付）。その後◯◯方面へ。帰宅は21:05。会話の要点：……`})
+        ),
+        React.createElement('div',null,
+          React.createElement('label',{className:"block text-sm font-medium mb-1"},"画像（任意・PNG/JPEG・5MB以下）"),
+          React.createElement('input',{type:"file",accept:"image/png,image/jpeg",onChange:e=>setFile(e.target.files?.[0]||null),className:"w-full border rounded-xl p-3"})
+        ),
+        React.createElement('button',{type:"submit",className:"w-full rounded-xl bg-slate-900 text-white p-3"},"今すぐ記録")
+      );
+    }
+
+    // ====== 一覧カード ======
+    function EntryCard({ e, images, editEntry, sealEntry, removeEntry }){
+      const [editing,setEditing]=useState(false);
+      const [title,setTitle]=useState(e.title);
+      const [category,setCategory]=useState(e.category);
+      const [note,setNote]=useState(e.note);
+      const img = e.imageId ? (images||{})[e.imageId] : null;
+      useEffect(()=>{ setTitle(e.title); setCategory(e.category); setNote(e.note); },[e]);
+      return React.createElement('li',{className:"rounded-xl border border-slate-200 bg-white p-4"},
+        React.createElement('div',{className:"text-xs text-slate-500"},"作成: ", jpTime(e.createdAt), e.sealedAt?` ／ 封印: ${jpTime(e.sealedAt)}`:""),
+        editing ? React.createElement('div',{className:"mt-2 space-y-2"},
+          React.createElement('input',{className:"w-full border rounded-xl p-2",value:title,onChange:e=>setTitle(e.target.value)}),
+          React.createElement('select',{className:"w-full border rounded-xl p-2",value:category,onChange:e=>setCategory(e.target.value)}, ['観察','会話','支出','場所','その他'].map(x=>React.createElement('option',{key:x,value:x},x))),
+          React.createElement('textarea',{className:"w-full border rounded-xl p-2 h-28",value:note,onChange:e=>setNote(e.target.value)})
+        ) : React.createElement(React.Fragment,null,
+          React.createElement('h3',{className:"mt-1 font-semibold"}, e.title || '（無題）'),
+          React.createElement('div',{className:"text-xs inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border"}, e.category),
+          img ? React.createElement('img',{src:img,alt:"添付画像",className:"mt-3 max-h-64 rounded-lg border"}) : null,
+          React.createElement('p',{className:"mt-2 whitespace-pre-wrap text-sm"}, e.note)
+        ),
+        React.createElement('div',{className:"mt-3 flex items-center gap-2"},
+          !e.sealedAt ? React.createElement(React.Fragment,null,
+            editing ? React.createElement(React.Fragment,null,
+              React.createElement('button',{className:"px-3 py-1 rounded-lg border",onClick:()=>setEditing(false)},"キャンセル"),
+              React.createElement('button',{className:"px-3 py-1 rounded-lg bg-slate-900 text-white",onClick:()=>editEntry(e.id,{title,category,note})},"保存")
+            ) : React.createElement(React.Fragment,null,
+              React.createElement('button',{className:"px-3 py-1 rounded-lg border",onClick:()=>setEditing(true)},"編集"),
+              React.createElement('button',{className:"px-3 py-1 rounded-lg border",onClick:()=>removeEntry(e.id)},"削除"),
+              React.createElement('button',{className:"ml-auto px-3 py-1 rounded-lg bg-emerald-600 text-white",onClick:()=>sealEntry(e.id)},"封印（確定）")
+            )
+          ) : React.createElement('span',{className:"ml-auto text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 border"},"封印済み・編集不可")
+        )
+      );
+    }
+
+    // ====== ロック設定パネル ======
+    function LockPanel({ store, setStore, password, setPassword, persist, setMsg }){
+      const [pw1,setPw1]=useState(""); const [pw2,setPw2]=useState("");
+      if (!store.requiresPassword){
+        return React.createElement('div',null,
+          React.createElement('p',{className:"text-sm text-slate-600"},"現在：", React.createElement('span',{className:"font-semibold"},"パスワード未設定"), "（平文保存）"),
+          React.createElement('div',{className:"mt-3 space-y-2"},
+            React.createElement('input',{type:"password",className:"w-full border rounded-xl p-3",placeholder:"新しいパスワード",value:pw1,onChange:e=>setPw1(e.target.value)}),
+            React.createElement('input',{type:"password",className:"w-full border rounded-xl p-3",placeholder:"確認用パスワード",value:pw2,onChange:e=>setPw2(e.target.value)}),
+            React.createElement('button',{disabled:!pw1||pw1!==pw2,onClick:async()=>{ const next={...(store||emptyStore()), requiresPassword:true}; await persist(next); setPassword(pw1); setMsg("暗号化保存に切替えました（以後は解錠が必要）"); },className:"w-full rounded-xl bg-slate-900 text-white p-3 disabled:opacity-40"},"パスワードを設定して暗号化保存に切替")
+          ),
+          React.createElement('p',{className:"mt-2 text-xs text-slate-500"},"※ 忘れると復元できません。安全な場所に保管を。")
+        );
+      }
+      return React.createElement('div',null,
+        React.createElement('p',{className:"text-sm text-slate-600"},"現在：", React.createElement('span',{className:"font-semibold"},"暗号化保存"), "（AES-GCM）"),
+        React.createElement('div',{className:"mt-2"},
+          React.createElement('button',{onClick:()=>{ setStore(null); localStorage.setItem(LS_KEY+"_enc", localStorage.getItem(LS_KEY+"_enc")||""); location.reload(); },className:"w-full rounded-xl border p-3"},"今すぐ画面をロック")
+        )
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+  </script>
+
+  <!-- =========================
+       PWAワンファイル設定（manifest を生成、SW 登録）
+       ========================= -->
+  <script>
+    (function(){
+      // manifest をその場生成してリンク（icon.png を参照）
+      const manifest = {
+        name: "Memo＋",
+        short_name: "Memo＋",
+        start_url: "./index.html",
+        display: "standalone",
+        background_color: "#ffffff",
+        theme_color: "#0f172a",
+        icons: [{ src: "./icon.png", sizes: "512x512", type: "image/png" }]
+      };
+      const blob = new Blob([JSON.stringify(manifest)], {type:"application/manifest+json"});
+      const url  = URL.createObjectURL(blob);
+      document.getElementById("dynamic-manifest").setAttribute("href", url);
+
+      // 簡易Service Worker（キャッシュ）
+      if ('serviceWorker' in navigator) {
+        const swCode = `
+          const CACHE='memo-plus-v1';
+          const ASSETS=['./','./index.html','./icon.png'];
+          self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));});
+          self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));});
+          self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(x=>{const y=x.clone();caches.open(CACHE).then(c=>c.put(e.request,y));return x;})));});
+        `;
+        const swBlob = new Blob([swCode], {type:'text/javascript'});
+        const swUrl  = URL.createObjectURL(swBlob);
+        window.addEventListener('load', ()=> navigator.serviceWorker.register(swUrl) );
+      }
+    })();
+  </script>
+
+  <!-- 印刷時は「入力フォーム等を非表示」にして提出用PDFを綺麗に -->
+  <style>
+    @media print {
+      header, form, .print-hide { display:none !important; }
+      body { background:#fff; }
+      main { padding:0 !important; }
+      li { break-inside: avoid; }
+    }
+  </style>
 </body>
 </html>
+

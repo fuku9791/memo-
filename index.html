@@ -1,476 +1,434 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Memo＋</title>
-  <meta name="theme-color" content="#0f172a" />
-  <meta name="description" content="改ざん防止・暗号化付き行動記録アプリ（画像添付／カテゴリ・検索AND/OR・並び替え・PDF印刷／感情ボタン＆寄り添いメッセージ）" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Memo＋</title>
+<meta name="theme-color" content="#0f172a" />
+<meta name="description" content="改ざん検知＋暗号化＋画像添付。カテゴリ/検索(AND/OR)/並び替え/提出用PDF/感情ボタン＆寄り添いメッセージ付きメモアプリ" />
 
-  <!-- Tailwind & React (UMD) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<!-- UI -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
-  <!-- アイコン（同じフォルダに icon.png を置いてね） -->
-  <link rel="icon" type="image/png" href="./icon.png" />
-  <link rel="apple-touch-icon" href="./icon.png" />
-  <!-- マニフェストは下のスクリプトで生成してリンク -->
-  <link id="dynamic-manifest" rel="manifest" href="">
+<!-- icons -->
+<link rel="icon" type="image/png" href="./icon.png">
+<link rel="apple-touch-icon" href="./icon.png">
+<link id="manifest-link" rel="manifest" href="">
+<style>
+  @media print {
+    header, form, .print-hide { display:none !important; }
+    body{ background:#fff; }
+    li{ break-inside: avoid; }
+  }
+</style>
 </head>
 <body class="bg-slate-50">
-  <div id="root"></div>
+<div id="root"></div>
 
-  <!-- =========================
-        アプリ本体（React）
-       ========================= -->
-  <script type="module">
-    const { useEffect, useState } = React;
+<script type="module">
+const {useState,useEffect} = React;
 
-    // ====== 共有ユーティリティ ======
-    const enc = new TextEncoder();
-    const dec = new TextDecoder();
-    const LS_KEY = "memo_plus_store_v4";      // ローカル保存キー（感情フィールド追加でv4）
-    const jpTime = (d) => new Date(d).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", hour12:false });
+/* ===================== 共通ユーティリティ ===================== */
+const enc = new TextEncoder(), dec = new TextDecoder();
+const LS_KEY="memo_plus_store_v4";
+const jpTime = d => new Date(d).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",hour12:false});
+const toHex = buf => Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+async function sha256Hex(t){return toHex(await crypto.subtle.digest("SHA-256",enc.encode(t)))}
+function uuid(){const a=crypto.getRandomValues(new Uint8Array(16));a[6]=(a[6]&15)|64;a[8]=(a[8]&63)|128;return [...a].map((b,i)=>(i===4||i===6||i===8||i===10?"-":"")+b.toString(16).padStart(2,"0")).join("")}
+const b64enc = bytes => btoa(String.fromCharCode(...bytes));
+const b64dec = b64 => new Uint8Array(atob(b64).split("").map(c=>c.charCodeAt(0)));
+async function deriveKey(pw,salt){
+  const km=await crypto.subtle.importKey("raw",enc.encode(pw),{name:"PBKDF2"},false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:120000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+}
+async function encryptJson(obj,pw){
+  const salt=crypto.getRandomValues(new Uint8Array(16));
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const key=await deriveKey(pw,salt);
+  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(JSON.stringify(obj)));
+  return {salt:b64enc(salt),iv:b64enc(iv),data:b64enc(new Uint8Array(ct))};
+}
+async function decryptJson(payload,pw){
+  const salt=b64dec(payload.salt),iv=b64dec(payload.iv),ct=b64dec(payload.data);
+  const key=await deriveKey(pw,salt);
+  const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv},key,ct);
+  return JSON.parse(dec.decode(new Uint8Array(pt)));
+}
 
-    async function sha256Hex(text){
-      const hash = await crypto.subtle.digest("SHA-256", enc.encode(text));
-      return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,"0")).join("");
+/* ===================== 感情＆寄り添いメッセージ ===================== */
+const MOODS=[
+  {key:"positive",label:"前向き",emoji:"🙂"},
+  {key:"normal",label:"ふつう",emoji:"😶"},
+  {key:"hard",label:"しんどい",emoji:"🥲"},
+  {key:"angry",label:"いらだち",emoji:"😡"},
+  {key:"tired",label:"つかれ",emoji:"😴"},
+];
+const SUPPORT={
+  positive:[
+    "いい流れ、ちゃんと掴めてる。今日の自分を褒めてあげてね。",
+    "前進できたね。小さな一歩でも積み重ねは力になるよ。",
+    "落ち着いて進められてる、すごい。自分のペースでOK。"
+  ],
+  normal:[
+    "淡々と続けられていること自体が大きな強さだよ。",
+    "大丈夫、十分できてる。完璧じゃなくていいからね。",
+    "呼吸を深く。今できる範囲でコツコツいこう。"
+  ],
+  hard:[
+    "しんどい中、ここまで記録できたことがすでに立派だよ。",
+    "つらいね。無理しすぎないで。温かい飲み物を一杯どう？",
+    "気持ちを言葉にできたのは強さ。あなたは一人じゃないよ。"
+  ],
+  angry:[
+    "その感情は正当だよ。事実を淡々と残せた自分を偉いって言ってあげて。",
+    "イラッとしたね。安全第一で、今日は自分を守る選択を優先してね。",
+    "落ち着いたら深呼吸。怒りは行動に変わるエネルギーにもなるよ。"
+  ],
+  tired:[
+    "よく頑張ったね。今日は早めに休む時間、少しでも作ろう。",
+    "疲れている時こそ“最小の一歩”。記録できた時点で合格だよ。",
+    "水分補給してね。明日の自分のために、いまは休む勇気も大切。"
+  ]
+};
+function pickSupport(k){const a=SUPPORT[k]||SUPPORT.normal;return a[Math.floor(Math.random()*a.length)]}
+
+/* ===================== データ形 ===================== */
+function emptyStore(){return {version:4,requiresPassword:false,entries:[],images:{}}}
+function entryMaterial(e){return [e.id,e.createdAt,e.sealedAt??"",e.title,e.category,e.note,(e.imageId||""),(e.moodKey||"")].join("|")}
+
+/* ===================== App ===================== */
+function App(){
+  const [store,setStore]=useState(null);
+  const [password,setPassword]=useState("");      // 現在のセッションPW
+  const [locked,setLocked]=useState(false);
+  const [hasEncrypted,setHasEncrypted]=useState(false);
+  const [msg,setMsg]=useState("");
+
+  // 絞り込み・検索
+  const [filterCat,setFilterCat]=useState("all");
+  const [searchMode,setSearchMode]=useState("AND");
+  const [searchText,setSearchText]=useState("");
+  const [sortMode,setSortMode]=useState("newest");
+
+  useEffect(()=>{
+    const encPayload=localStorage.getItem(LS_KEY+"_enc");
+    if(encPayload){setHasEncrypted(true);setLocked(true);}
+    else{
+      const plain=localStorage.getItem(LS_KEY);
+      setStore(plain?JSON.parse(plain):emptyStore());
     }
-    function uuid(){
-      const a=crypto.getRandomValues(new Uint8Array(16));
-      a[6]=(a[6]&0x0f)|0x40; a[8]=(a[8]&0x3f)|0x80;
-      return [...a].map((b,i)=>(i===4||i===6||i===8||i===10?"-":"")+b.toString(16).padStart(2,"0")).join("");
+  },[]);
+  useEffect(()=>{if(hasEncrypted)setLocked(true)},[hasEncrypted]);
+
+  async function persist(next){
+    if(next.requiresPassword){
+      if(!password){setMsg("パスワード未入力。ロック設定からパスワードを入れてね。");return;}
+      const encObj=await encryptJson(next,password);
+      localStorage.removeItem(LS_KEY);
+      localStorage.setItem(LS_KEY+"_enc",JSON.stringify(encObj));
+      setHasEncrypted(true);
+    }else{
+      localStorage.removeItem(LS_KEY+"_enc");
+      localStorage.setItem(LS_KEY,JSON.stringify(next));
+      setHasEncrypted(false);
     }
+    setStore(next);
+  }
+  async function unlock(pw){
+    try{
+      const payload=JSON.parse(localStorage.getItem(LS_KEY+"_enc"));
+      const data=await decryptJson(payload,pw);
+      setPassword(pw);setStore(data);setLocked(false);setMsg("");
+    }catch{setMsg("パスワードが違う可能性があります");}
+  }
 
-    // === 暗号化（AES-GCM + PBKDF2） ===
-    const b64enc = (bytes)=> btoa(String.fromCharCode(...bytes));
-    const b64dec = (b64)=> new Uint8Array(atob(b64).split("").map(c=>c.charCodeAt(0)));
-    async function deriveKey(password, salt){
-      const km = await crypto.subtle.importKey("raw", enc.encode(password), {name:"PBKDF2"}, false, ["deriveKey"]);
-      return crypto.subtle.deriveKey(
-        {name:"PBKDF2", salt, iterations:120000, hash:"SHA-256"},
-        km, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]
-      );
+  // 画像
+  async function addImage(file){
+    if(!file) return {id:null};
+    if(!/image\/(png|jpeg)/.test(file.type)){setMsg("PNG/JPEGのみ許可");return {id:null};}
+    if(file.size>5*1024*1024){setMsg("画像は5MB以下にしてね");return {id:null};}
+    const r=new FileReader();
+    const dataURL=await new Promise((res,rej)=>{r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});
+    const id=uuid();
+    await persist({...store,images:{...(store.images||{}),[id]:dataURL}});
+    return {id};
+  }
+
+  // CRUD
+  async function addEntry({title,category,note,imageId,moodKey}){
+    const now=new Date().toISOString();
+    const prev=store.entries[store.entries.length-1]?.hash ?? "GENESIS";
+    const draft={id:uuid(),createdAt:now,sealedAt:null,title:title.trim(),category,note,imageId:imageId||null,moodKey:moodKey||null,prevHash:prev,hash:""};
+    draft.hash=await sha256Hex(prev+"|"+entryMaterial(draft));
+    await persist({...store,entries:[...store.entries,draft]});
+    if(moodKey){setMsg(pickSupport(moodKey));setTimeout(()=>setMsg(""),6000);}
+  }
+  async function editEntry(id,fields){
+    const idx=store.entries.findIndex(e=>e.id===id); if(idx<0||store.entries[idx].sealedAt) return;
+    const arr=[...store.entries]; arr[idx]={...arr[idx],...fields};
+    let prev="GENESIS";
+    for(let i=0;i<arr.length;i++){arr[i].prevHash=prev;arr[i].hash=await sha256Hex(prev+"|"+entryMaterial(arr[i]));prev=arr[i].hash;}
+    await persist({...store,entries:arr});
+  }
+  async function sealEntry(id){
+    const idx=store.entries.findIndex(e=>e.id===id); if(idx<0||store.entries[idx].sealedAt) return;
+    const arr=[...store.entries]; arr[idx]={...arr[idx],sealedAt:new Date().toISOString()};
+    let prev="GENESIS";
+    for(let i=0;i<arr.length;i++){arr[i].prevHash=prev;arr[i].hash=await sha256Hex(prev+"|"+entryMaterial(arr[i]));prev=arr[i].hash;}
+    await persist({...store,entries:arr});
+  }
+  async function removeEntry(id){
+    const idx=store.entries.findIndex(e=>e.id===id); if(idx<0||store.entries[idx].sealedAt) return;
+    const arr=store.entries.filter(e=>e.id!==id);
+    let prev="GENESIS";
+    for(let i=0;i<arr.length;i++){arr[i].prevHash=prev;arr[i].hash=await sha256Hex(prev+"|"+entryMaterial(arr[i]));prev=arr[i].hash;}
+    await persist({...store,entries:arr});
+  }
+
+  // I/O
+  function exportJson(){
+    const blob=new Blob([JSON.stringify(store,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob); const a=document.createElement("a");
+    a.href=url; a.download=`memo-plus-${new Date().toISOString().replace(/[:.]/g,"-")}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  }
+  function importJson(file){
+    const r=new FileReader();
+    r.onload=async()=>{try{const obj=JSON.parse(r.result); if(!Array.isArray(obj.entries)) throw 0; await persist(obj);}catch{setMsg("インポート失敗")}};
+    r.readAsText(file);
+  }
+
+  // 絞り込み/検索/並び替え
+  function filteredEntries(){
+    let arr=[...store.entries];
+    if(filterCat!=="all") arr=arr.filter(e=>e.category===filterCat);
+    if(searchText.trim()){
+      const words=searchText.trim().split(/\s+/);
+      arr=arr.filter(e=>{
+        const hay=(e.title+e.note+(e.moodKey||"")).toLowerCase();
+        return (searchMode==="AND") ? words.every(w=>hay.includes(w.toLowerCase()))
+                                    : words.some(w=>hay.includes(w.toLowerCase()));
+      });
     }
-    async function encryptJson(obj, password){
-      const salt = crypto.getRandomValues(new Uint8Array(16));
-      const iv   = crypto.getRandomValues(new Uint8Array(12));
-      const key  = await deriveKey(password, salt);
-      const ct   = await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, enc.encode(JSON.stringify(obj)));
-      return { salt: b64enc(salt), iv: b64enc(iv), data: b64enc(new Uint8Array(ct)) };
-    }
-    async function decryptJson(payload, password){
-      const salt=b64dec(payload.salt), iv=b64dec(payload.iv), ct=b64dec(payload.data);
-      const key = await deriveKey(password, salt);
-      const pt  = await crypto.subtle.decrypt({name:"AES-GCM", iv}, key, ct);
-      return JSON.parse(dec.decode(new Uint8Array(pt)));
-    }
+    if(sortMode==="newest") arr.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+    if(sortMode==="oldest") arr.sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));
+    return arr;
+  }
 
-    // ====== 感情セット＆寄り添いメッセージ ======
-    const MOODS = [
-      { key:"positive", label:"前向き", emoji:"🙂" },
-      { key:"normal",   label:"ふつう", emoji:"😶" },
-      { key:"hard",     label:"しんどい", emoji:"🥲" },
-      { key:"angry",    label:"いらだち", emoji:"😡" },
-      { key:"tired",    label:"つかれ", emoji:"😴" },
-    ];
-    const SUPPORT = {
-      positive: [
-        "いい流れ、ちゃんと掴めてる。今日の自分を褒めてあげてね。",
-        "前進できたね。小さな一歩でも積み重ねは力になるよ。",
-        "落ち着いて進められてる、すごい。自分のペースでOK。"
-      ],
-      normal: [
-        "淡々と続けられていること自体が大きな強さだよ。",
-        "大丈夫、十分できてる。完璧じゃなくていいからね。",
-        "呼吸を深く。今できる範囲でコツコツいこう。"
-      ],
-      hard: [
-        "しんどい中、ここまで記録できたことがすでに立派だよ。",
-        "つらいね。無理しすぎないで。温かい飲み物を一杯どう？",
-        "気持ちを言葉にできたのは強さ。あなたは一人じゃないよ。"
-      ],
-      angry: [
-        "その感情は正当だよ。事実を淡々と残せた自分を偉いって言ってあげて。",
-        "イラッとしたね。安全第一で、今日は自分を守る選択を優先してね。",
-        "落ち着いたら深呼吸。怒りは行動に変わるエネルギーにもなるよ。"
-      ],
-      tired: [
-        "よく頑張ったね。今日は早めに休む時間、少しでも作ろう。",
-        "疲れている時こそ“最小の一歩”。記録できた時点で合格だよ。",
-        "水分補給してね。明日の自分のために、いまは休む勇気も大切。"
-      ]
-    };
-    function pickSupport(moodKey){
-      const arr = SUPPORT[moodKey] || SUPPORT.normal;
-      return arr[Math.floor(Math.random()*arr.length)];
-    }
+  // ロック画面
+  if(locked&&hasEncrypted){
+    return React.createElement('div',{className:"min-h-screen bg-slate-50 p-6"},
+      React.createElement('div',{className:"max-w-xl mx-auto bg-white rounded-2xl shadow p-6"},
+        React.createElement('h1',{className:"text-2xl font-bold mb-2"},"🔐 Memo＋（鍵付き）"),
+        React.createElement('p',{className:"text-sm text-slate-600 mb-6"},"端末内の暗号化データがあります。パスワードで解錠してください。"),
+        React.createElement('input',{type:"password",className:"w-full border rounded-xl p-3",placeholder:"••••••••",onChange:e=>setPassword(e.target.value)}),
+        React.createElement('button',{onClick:()=>unlock(password),className:"mt-4 w-full rounded-xl p-3 bg-slate-900 text-white"},"解錠する"),
+        msg && React.createElement('p',{className:"mt-3 text-red-600 text-sm"},msg)
+      ));
+  }
+  if(!store) return React.createElement('div',{className:"p-6"},"読み込み中…");
 
-    // ====== データ形 ======
-    function emptyStore(){ return { version:4, requiresPassword:false, entries:[], images:{} }; }
-    function entryMaterial(e){ return [e.id,e.createdAt,e.sealedAt??"",e.title,e.category,e.note,(e.imageId||""),(e.moodKey||"")].join("|"); }
-
-    // ====== ルートApp ======
-    function App(){
-      const [store,setStore]=useState(null);
-      const [password,setPassword]=useState("");
-      const [locked,setLocked]=useState(false);
-      const [hasEncrypted,setHasEncrypted]=useState(false);
-      const [msg,setMsg]=useState("");
-
-      // 絞り込み・検索UI
-      const [filterCat,setFilterCat]=useState("all");
-      const [searchMode,setSearchMode]=useState("AND");
-      const [searchText,setSearchText]=useState("");
-      const [sortMode,setSortMode]=useState("newest");
-
-      // 起動時：暗号化保存があればロック画面から
-      useEffect(()=>{
-        const encPayload = localStorage.getItem(LS_KEY+"_enc");
-        if (encPayload){ setHasEncrypted(true); setLocked(true); }
-        else{
-          const plain = localStorage.getItem(LS_KEY);
-          setStore(plain? JSON.parse(plain): emptyStore());
-        }
-      },[]);
-      useEffect(()=>{ if (hasEncrypted){ setLocked(true); } },[hasEncrypted]);
-
-      // 保存
-      async function persist(next){
-        if (next.requiresPassword){
-          if (!password){ setMsg("パスワード未入力。ロック設定でパスワードを入れてね。"); return; }
-          const encObj = await encryptJson(next, password);
-          localStorage.removeItem(LS_KEY);
-          localStorage.setItem(LS_KEY+"_enc", JSON.stringify(encObj));
-          setHasEncrypted(true);
-        }else{
-          localStorage.removeItem(LS_KEY+"_enc");
-          localStorage.setItem(LS_KEY, JSON.stringify(next));
-          setHasEncrypted(false);
-        }
-        setStore(next);
-      }
-      async function unlock(pw){
-        try{
-          const payload = JSON.parse(localStorage.getItem(LS_KEY+"_enc"));
-          const data = await decryptJson(payload, pw);
-          setPassword(pw); setStore(data); setLocked(false); setMsg("");
-        }catch{ setMsg("パスワードが違う可能性があります"); }
-      }
-
-      // 画像登録（PNG/JPEG 5MBまで）
-      async function addImage(file){
-        if (!file) return { id:null };
-        if (!/image\/(png|jpeg)/.test(file.type)) { setMsg("PNG/JPEGのみ許可"); return { id:null }; }
-        if (file.size > 5*1024*1024) { setMsg("画像は5MB以下にしてね"); return { id:null }; }
-        const reader = new FileReader();
-        const dataURL = await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); });
-        const id = uuid();
-        const next = { ...store, images: { ...(store.images||{}), [id]: dataURL } };
-        await persist(next);
-        return { id };
-      }
-
-      // 追加・編集・封印・削除
-      async function addEntry({title,category,note,imageId,moodKey}){
-        const now = new Date().toISOString();
-        const prev = store.entries[store.entries.length-1]?.hash ?? "GENESIS";
-        const draft = { id: uuid(), createdAt: now, sealedAt:null, title:title.trim(), category, note, imageId:imageId||null, moodKey: moodKey||null, prevHash: prev, hash:"" };
-        draft.hash = await sha256Hex(prev+"|"+entryMaterial(draft));
-        const next = { ...store, entries:[...store.entries,draft] };
-        await persist(next);
-        if (moodKey){ setMsg(pickSupport(moodKey)); setTimeout(()=>setMsg(""), 6000); }
-      }
-      async function editEntry(id, fields){
-        const idx = store.entries.findIndex(e=>e.id===id); if (idx<0) return; if (store.entries[idx].sealedAt) return;
-        const arr=[...store.entries]; arr[idx] = { ...arr[idx], ...fields };
-        let prev = "GENESIS";
-        for (let i=0;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash = await sha256Hex(prev+"|"+entryMaterial(arr[i])); prev=arr[i].hash; }
-        await persist({ ...store, entries: arr });
-      }
-      async function sealEntry(id){
-        const idx = store.entries.findIndex(e=>e.id===id); if (idx<0) return; if (store.entries[idx].sealedAt) return;
-        const arr=[...store.entries]; arr[idx] = { ...arr[idx], sealedAt: new Date().toISOString() };
-        let prev = "GENESIS";
-        for (let i=0;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash = await sha256Hex(prev+"|"+entryMaterial(arr[i])); prev=arr[i].hash; }
-        await persist({ ...store, entries: arr });
-      }
-      async function removeEntry(id){
-        const idx = store.entries.findIndex(e=>e.id===id); if (idx<0) return; if (store.entries[idx].sealedAt) return;
-        const arr = store.entries.filter(e=>e.id!==id);
-        let prev = "GENESIS";
-        for (let i=0;i<arr.length;i++){ arr[i].prevHash=prev; arr[i].hash = await sha256Hex(prev+"|"+entryMaterial(arr[i])); prev=arr[i].hash; }
-        await persist({ ...store, entries: arr });
-      }
-
-      // エクスポート／インポート
-      function exportJson(){
-        const blob=new Blob([JSON.stringify(store,null,2)],{type:"application/json"});
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement("a");
-        a.href=url; a.download=`memo-plus-${new Date().toISOString().replace(/[:.]/g,"-")}.json`;
-        a.click(); URL.revokeObjectURL(url);
-      }
-      function importJson(file){
-        const r=new FileReader();
-        r.onload=async()=>{ try{ const obj=JSON.parse(r.result); if(!Array.isArray(obj.entries)) throw 0; await persist(obj); }catch{ setMsg("インポート失敗"); } };
-        r.readAsText(file);
-      }
-
-      // 絞り込み・検索・並び替え
-      function filteredEntries(){
-        let arr = [...store.entries];
-        if(filterCat!=="all"){ arr = arr.filter(e=>e.category===filterCat); }
-        if(searchText.trim()){
-          const words = searchText.trim().split(/\s+/);
-          arr = arr.filter(e=>{
-            const hay = (e.title+e.note+(e.moodKey||"")).toLowerCase();
-            if (searchMode==="AND")  return words.every(w=> hay.includes(w.toLowerCase()));
-            else                     return words.some(w=> hay.includes(w.toLowerCase()));
-          });
-        }
-        if(sortMode==="newest"){ arr.sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt)); }
-        if(sortMode==="oldest"){ arr.sort((a,b)=> new Date(a.createdAt)-new Date(b.createdAt)); }
-        return arr;
-      }
-
-      // ====== 画面：ロック解除 ======
-      if (locked && hasEncrypted){
-        return React.createElement('div',{className:"min-h-screen bg-slate-50 p-6"},
-          React.createElement('div',{className:"max-w-xl mx-auto bg-white rounded-2xl shadow p-6"},
-            React.createElement('h1',{className:"text-2xl font-bold mb-2"},"🔐 Memo＋（鍵付き）"),
-            React.createElement('p',{className:"text-sm text-slate-600 mb-6"},"端末内の暗号化データがあります。パスワードで解錠してください。"),
-            React.createElement('input',{type:"password",className:"w-full border rounded-xl p-3",placeholder:"••••••••",onChange:e=>setPassword(e.target.value)}),
-            React.createElement('button',{onClick:()=>unlock(password),className:"mt-4 w-full rounded-xl p-3 bg-slate-900 text-white"},"解錠する"),
-            msg && React.createElement('p',{className:"mt-3 text-red-600 text-sm"},msg)
-          ));
-      }
-      if (!store) return React.createElement('div',{className:"p-6"},"読み込み中…");
-
-      // ====== 画面：通常 ======
-      return React.createElement(React.Fragment,null,
-        React.createElement('header',{className:"sticky top-0 bg-white/90 border-b z-10"},
-          React.createElement('div',{className:"max-w-5xl mx-auto px-4 py-3 flex flex-wrap gap-2 items-center justify-between"},
-            React.createElement('h1',{className:"font-bold text-xl"},"Memo＋（改ざん検知・鍵付き）"),
-            React.createElement('div',{className:"flex flex-wrap gap-2"},
-              React.createElement('button',{className:"px-3 py-2 rounded-lg border",onClick:()=>window.print()},"相談用PDF"),
-              React.createElement('button',{className:"px-3 py-2 rounded-lg border",onClick:exportJson},"エクスポート"),
-              React.createElement('label',{className:"px-3 py-2 rounded-lg border cursor-pointer"},"インポート",
-                React.createElement('input',{type:"file",accept:"application/json",className:"hidden",onChange:e=>e.target.files?.[0]&&importJson(e.target.files[0])})
-              )
-            )
+  return React.createElement(React.Fragment,null,
+    React.createElement('header',{className:"sticky top-0 bg-white/90 border-b z-10"},
+      React.createElement('div',{className:"max-w-5xl mx-auto px-4 py-3 flex flex-wrap gap-2 items-center justify-between"},
+        React.createElement('h1',{className:"font-bold text-xl"},"Memo＋（改ざん検知・鍵付き）"),
+        React.createElement('div',{className:"flex flex-wrap gap-2"},
+          React.createElement('button',{className:"px-3 py-2 rounded-lg border",onClick:()=>window.print()},"相談用PDF"),
+          React.createElement('button',{className:"px-3 py-2 rounded-lg border",onClick:exportJson},"エクスポート"),
+          React.createElement('label',{className:"px-3 py-2 rounded-lg border cursor-pointer"},"インポート",
+            React.createElement('input',{type:"file",accept:"application/json",className:"hidden",onChange:e=>e.target.files?.[0]&&importJson(e.target.files[0])})
           )
-        ),
+        )
+      )
+    ),
 
-        React.createElement('main',{className:"max-w-5xl mx-auto p-4 grid gap-6 sm:grid-cols-5"},
-          // 左：新規登録＆ロック
-          React.createElement('div',{className:"sm:col-span-2"},
-            React.createElement('section',{className:"bg-white rounded-2xl shadow p-4"},
-              React.createElement('h2',{className:"font-semibold mb-3"},"📝 新規記録"),
-              msg && React.createElement('div',{className:"mb-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-2"}, "💬 ", msg),
-              React.createElement(NewEntryForm,{ onSubmit: async ({title,category,note,file,moodKey})=>{
-                let imageId=null; if(file){ const r=await addImage(file); imageId=r.id; }
-                await addEntry({title,category,note,imageId,moodKey});
-              }})
+    React.createElement('main',{className:"max-w-5xl mx-auto p-4 grid gap-6 sm:grid-cols-5"},
+      /* 左カラム：新規記録＋ロック */
+      React.createElement('div',{className:"sm:col-span-2"},
+        React.createElement('section',{className:"bg-white rounded-2xl shadow p-4"},
+          React.createElement('h2',{className:"font-semibold mb-3"},"📝 新規記録"),
+          msg && React.createElement('div',{className:"mb-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-2"},"💬 ",msg),
+          React.createElement(NewEntryForm,{onSubmit: async({title,category,note,file,moodKey})=>{
+            let imageId=null; if(file){const r=await addImage(file); imageId=r.id;}
+            await addEntry({title,category,note,imageId,moodKey});
+          }})
+        ),
+        React.createElement('section',{className:"bg-white rounded-2xl shadow p-4 mt-4"},
+          React.createElement('h2',{className:"font-semibold mb-3"},"🔐 ロック設定"),
+          React.createElement(LockPanel,{store,setStore,password,setPassword,persist,setMsg})
+        )
+      ),
+
+      /* 右カラム：一覧＋フィルタ/検索/並び替え */
+      React.createElement('div',{className:"sm:col-span-3"},
+        React.createElement('section',{className:"bg-white rounded-2xl shadow p-4"},
+          React.createElement('div',{className:"flex flex-wrap gap-2 mb-3"},
+            React.createElement('select',{value:filterCat,onChange:e=>setFilterCat(e.target.value),className:"border rounded-lg p-2"},
+              React.createElement('option',{value:"all"},"すべて"),
+              ['観察','会話','支出','場所','その他'].map(c=>React.createElement('option',{key:c,value:c},c))
             ),
-            React.createElement('section',{className:"bg-white rounded-2xl shadow p-4 mt-4"},
-              React.createElement('h2',{className:"font-semibold mb-3"},"🔐 ロック設定"),
-              React.createElement(LockPanel,{store,setStore,password,setPassword,persist,setMsg})
+            React.createElement('select',{value:searchMode,onChange:e=>setSearchMode(e.target.value),className:"border rounded-lg p-2"},
+              React.createElement('option',{value:"AND"},"AND検索"),
+              React.createElement('option',{value:"OR"},"OR検索")
+            ),
+            React.createElement('input',{type:"text",placeholder:"検索ワード（スペース区切り）",value:searchText,onChange:e=>setSearchText(e.target.value),className:"flex-1 border rounded-lg p-2"}),
+            React.createElement('select',{value:sortMode,onChange:e=>setSortMode(e.target.value),className:"border rounded-lg p-2"},
+              React.createElement('option',{value:"newest"},"新しい順"),
+              React.createElement('option',{value:"oldest"},"古い順")
             )
           ),
-
-          // 右：一覧（絞り込み・検索・並び替え）
-          React.createElement('div',{className:"sm:col-span-3"},
-            React.createElement('section',{className:"bg-white rounded-2xl shadow p-4"},
-              React.createElement('div',{className:"flex flex-wrap gap-2 mb-3"},
-                React.createElement('select',{value:filterCat,onChange:e=>setFilterCat(e.target.value),className:"border rounded-lg p-2"},
-                  React.createElement('option',{value:"all"},"すべて"),
-                  ['観察','会話','支出','場所','その他'].map(c=>React.createElement('option',{key:c,value:c},c))
-                ),
-                React.createElement('select',{value:searchMode,onChange:e=>setSearchMode(e.target.value),className:"border rounded-lg p-2"},
-                  React.createElement('option',{value:"AND"},"AND検索"),
-                  React.createElement('option',{value:"OR"},"OR検索")
-                ),
-                React.createElement('input',{type:"text",placeholder:"検索ワード（スペース区切り）",value:searchText,onChange:e=>setSearchText(e.target.value),className:"flex-1 border rounded-lg p-2"}),
-                React.createElement('select',{value:sortMode,onChange:e=>setSortMode(e.target.value),className:"border rounded-lg p-2"},
-                  React.createElement('option',{value:"newest"},"新しい順"),
-                  React.createElement('option',{value:"oldest"},"古い順")
-                )
-              ),
-              filteredEntries().length===0
-                ? React.createElement('p',{className:"text-sm text-slate-500"},"該当する記録はありません。")
-                : React.createElement('ul',{className:"space-y-3"},
-                    filteredEntries().map((e)=>React.createElement(EntryCard,{key:e.id,e,images:store.images,editEntry,sealEntry,removeEntry}))
-                  )
-            )
-          )
+          filteredEntries().length===0
+            ? React.createElement('p',{className:"text-sm text-slate-500"},"該当する記録はありません。")
+            : React.createElement('ul',{className:"space-y-3"},
+                filteredEntries().map(e=>React.createElement(EntryCard,{key:e.id,e,images:store.images,editEntry,sealEntry,removeEntry}))
+              )
         )
-      );
-    }
+      )
+    )
+  );
+}
 
-    // ====== フォーム ======
-    function NewEntryForm({ onSubmit }){
-      const [title,setTitle]=useState("");
-      const [category,setCategory]=useState("観察");
-      const [note,setNote]=useState("");
-      const [file,setFile]=useState(null);
-      const [mood,setMood]=useState(null);
+/* -------------- 新規フォーム -------------- */
+function NewEntryForm({onSubmit}){
+  const [title,setTitle]=useState("");
+  const [category,setCategory]=useState("観察");
+  const [note,setNote]=useState("");
+  const [file,setFile]=useState(null);
+  const [mood,setMood]=useState(null);
 
-      const handle=async(e)=>{ 
-        e.preventDefault(); 
-        if(!title.trim()&&!note.trim()&&!file) return; 
-        await onSubmit({title,category,note,file,moodKey:mood});
-        setTitle(""); setCategory("観察"); setNote(""); setFile(null); setMood(null);
-        e.target.reset(); 
-      };
+  const handle=async(e)=>{
+    e.preventDefault();
+    if(!title.trim()&&!note.trim()&&!file) return;
+    await onSubmit({title,category,note,file,moodKey:mood});
+    setTitle(""); setCategory("観察"); setNote(""); setFile(null); setMood(null);
+    e.target.reset();
+  };
 
-      return React.createElement('form',{onSubmit:handle,className:"space-y-3"},
-        React.createElement('div',null,
-          React.createElement('label',{className:"block text-sm font-medium mb-1"},"タイトル（任意）"),
-          React.createElement('input',{value:title,onChange:e=>setTitle(e.target.value),className:"w-full border rounded-xl p-3",placeholder:"例：講習と言って外出 / 支出メモ / 会話の要点 など"})
-        ),
-        React.createElement('div',null,
-          React.createElement('label',{className:"block text-sm font-medium mb-1"},"カテゴリー"),
-          React.createElement('select',{value:category,onChange:e=>setCategory(e.target.value),className:"w-full border rounded-xl p-3"}, ['観察','会話','支出','場所','その他'].map(x=>React.createElement('option',{key:x,value:x},x)))
-        ),
-        React.createElement('div',null,
-          React.createElement('label',{className:"block text-sm font-medium mb-1"},"本文"),
-          React.createElement('textarea',{value:note,onChange:e=>setNote(e.target.value),className:"w-full border rounded-xl p-3 h-32",placeholder:`例：${new Date().toLocaleString('ja-JP',{ timeZone:'Asia/Tokyo', hour12:false })} 自宅を出発。コンビニで◯◯を購入（レシート添付）。その後◯◯方面へ。帰宅は21:05。会話の要点：……`})
-        ),
-        React.createElement('div',null,
-          React.createElement('label',{className:"block text-sm font-medium mb-1"},"今日の気持ち（任意）"),
-          React.createElement('div',{className:"flex flex-wrap gap-2"},
-            ...MOODS.map(m =>
-              React.createElement('button',{
-                type:"button",
-                key:m.key,
-                onClick:()=>setMood(m.key),
-                className:
-                  "px-3 py-1 rounded-full border "+
-                  (mood===m.key ? "bg-slate-900 text-white" : "bg-white text-slate-700")
-              }, `${m.emoji} ${m.label}`)
-            )
-          )
-        ),
-        React.createElement('div',null,
-          React.createElement('label',{className:"block text-sm font-medium mb-1"},"画像（任意・PNG/JPEG・5MB以下）"),
-          React.createElement('input',{type:"file",accept:"image/png,image/jpeg",onChange:e=>setFile(e.target.files?.[0]||null),className:"w-full border rounded-xl p-3"})
-        ),
-        React.createElement('button',{type:"submit",className:"w-full rounded-xl bg-slate-900 text-white p-3"},"今すぐ記録")
-      );
-    }
+  return React.createElement('form',{onSubmit:handle,className:"space-y-3"},
+    React.createElement('div',null,
+      React.createElement('label',{className:"block text-sm font-medium mb-1"},"タイトル（任意）"),
+      React.createElement('input',{value:title,onChange:e=>setTitle(e.target.value),className:"w-full border rounded-xl p-3",placeholder:"例：講習と言って外出 / 支出メモ / 会話の要点 など"})
+    ),
+    React.createElement('div',null,
+      React.createElement('label',{className:"block text-sm font-medium mb-1"},"カテゴリー"),
+      React.createElement('select',{value:category,onChange:e=>setCategory(e.target.value),className:"w-full border rounded-xl p-3"},['観察','会話','支出','場所','その他'].map(x=>React.createElement('option',{key:x,value:x},x)))
+    ),
+    React.createElement('div',null,
+      React.createElement('label',{className:"block text-sm font-medium mb-1"},"本文"),
+      React.createElement('textarea',{value:note,onChange:e=>setNote(e.target.value),className:"w-full border rounded-xl p-3 h-32",placeholder:`例：${new Date().toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',hour12:false})} 自宅を出発。コンビニで◯◯を購入（レシート添付）。その後◯◯方面へ。帰宅は21:05。会話の要点：……`})
+    ),
+    React.createElement('div',null,
+      React.createElement('label',{className:"block text-sm font-medium mb-1"},"今日の気持ち（任意）"),
+      React.createElement('div',{className:"flex flex-wrap gap-2"},
+        ...MOODS.map(m=>React.createElement('button',{type:"button",key:m.key,onClick:()=>setMood(m.key),
+          className:"px-3 py-1 rounded-full border "+(mood===m.key?"bg-slate-900 text-white":"bg-white text-slate-700")},`${m.emoji} ${m.label}`))
+      )
+    ),
+    React.createElement('div',null,
+      React.createElement('label',{className:"block text-sm font-medium mb-1"},"画像（任意・PNG/JPEG・5MB以下）"),
+      React.createElement('input',{type:"file",accept:"image/png,image/jpeg",onChange:e=>setFile(e.target.files?.[0]||null),className:"w-full border rounded-xl p-3"})
+    ),
+    React.createElement('button',{type:"submit",className:"w-full rounded-xl bg-slate-900 text-white p-3"},"今すぐ記録")
+  );
+}
 
-    // ====== 一覧カード ======
-    function EntryCard({ e, images, editEntry, sealEntry, removeEntry }){
-      const [editing,setEditing]=useState(false);
-      const [title,setTitle]=useState(e.title);
-      const [category,setCategory]=useState(e.category);
-      const [note,setNote]=useState(e.note);
-      const img = e.imageId ? (images||{})[e.imageId] : null;
+/* -------------- 一覧カード -------------- */
+function EntryCard({e,images,editEntry,sealEntry,removeEntry}){
+  const [editing,setEditing]=useState(false);
+  const [title,setTitle]=useState(e.title);
+  const [category,setCategory]=useState(e.category);
+  const [note,setNote]=useState(e.note);
+  const img = e.imageId ? (images||{})[e.imageId] : null;
+  useEffect(()=>{setTitle(e.title);setCategory(e.category);setNote(e.note);},[e]);
+  const moodDef = e.moodKey ? MOODS.find(m=>m.key===e.moodKey) : null;
 
-      useEffect(()=>{ setTitle(e.title); setCategory(e.category); setNote(e.note); },[e]);
-
-      const moodDef = e.moodKey ? MOODS.find(m=>m.key===e.moodKey) : null;
-
-      return React.createElement('li',{className:"rounded-xl border border-slate-200 bg-white p-4"},
-        React.createElement('div',{className:"text-xs text-slate-500"},"作成: ", jpTime(e.createdAt), e.sealedAt?` ／ 封印: ${jpTime(e.sealedAt)}`:""),
-        editing ? React.createElement('div',{className:"mt-2 space-y-2"},
-          React.createElement('input',{className:"w-full border rounded-xl p-2",value:title,onChange:e=>setTitle(e.target.value)}),
-          React.createElement('select',{className:"w-full border rounded-xl p-2",value:category,onChange:e=>setCategory(e.target.value)}, ['観察','会話','支出','場所','その他'].map(x=>React.createElement('option',{key:x,value:x},x))),
-          React.createElement('textarea',{className:"w-full border rounded-xl p-2 h-28",value:note,onChange:e=>setNote(e.target.value)})
+  return React.createElement('li',{className:"rounded-xl border border-slate-200 bg-white p-4"},
+    React.createElement('div',{className:"text-xs text-slate-500"},"作成: ",jpTime(e.createdAt), e.sealedAt?` ／ 封印: ${jpTime(e.sealedAt)}`:""),
+    editing ? React.createElement('div',{className:"mt-2 space-y-2"},
+      React.createElement('input',{className:"w-full border rounded-xl p-2",value:title,onChange:e=>setTitle(e.target.value)}),
+      React.createElement('select',{className:"w-full border rounded-xl p-2",value:category,onChange:e=>setCategory(e.target.value)},['観察','会話','支出','場所','その他'].map(x=>React.createElement('option',{key:x,value:x},x))),
+      React.createElement('textarea',{className:"w-full border rounded-xl p-2 h-28",value:note,onChange:e=>setNote(e.target.value)})
+    ) : React.createElement(React.Fragment,null,
+      React.createElement('h3',{className:"mt-1 font-semibold"},e.title||"（無題）"),
+      React.createElement('div',{className:"flex gap-2 items-center mt-1"},
+        React.createElement('span',{className:"text-xs inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border"},e.category),
+        moodDef && React.createElement('span',{className:"text-xs inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border"},`${moodDef.emoji} ${moodDef.label}`)
+      ),
+      img && React.createElement('img',{src:img,alt:"添付画像",className:"mt-3 max-h-64 rounded-lg border"}),
+      React.createElement('p',{className:"mt-2 whitespace-pre-wrap text-sm"},e.note)
+    ),
+    React.createElement('div',{className:"mt-3 flex items-center gap-2"},
+      !e.sealedAt ? React.createElement(React.Fragment,null,
+        editing ? React.createElement(React.Fragment,null,
+          React.createElement('button',{className:"px-3 py-1 rounded-lg border",onClick:()=>setEditing(false)},"キャンセル"),
+          React.createElement('button',{className:"px-3 py-1 rounded-lg bg-slate-900 text-white",onClick:()=>editEntry(e.id,{title,category,note})},"保存")
         ) : React.createElement(React.Fragment,null,
-          React.createElement('h3',{className:"mt-1 font-semibold"}, e.title || '（無題）'),
-          React.createElement('div',{className:"flex gap-2 items-center mt-1"},
-            React.createElement('span',{className:"text-xs inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border"}, e.category),
-            moodDef && React.createElement('span',{className:"text-xs inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border"}, `${moodDef.emoji} ${moodDef.label}`)
-          ),
-          img ? React.createElement('img',{src:img,alt:"添付画像",className:"mt-3 max-h-64 rounded-lg border"}) : null,
-          React.createElement('p',{className:"mt-2 whitespace-pre-wrap text-sm"}, e.note)
-        ),
-        React.createElement('div',{className:"mt-3 flex items-center gap-2"},
-          !e.sealedAt ? React.createElement(React.Fragment,null,
-            editing ? React.createElement(React.Fragment,null,
-              React.createElement('button',{className:"px-3 py-1 rounded-lg border",onClick:()=>setEditing(false)},"キャンセル"),
-              React.createElement('button',{className:"px-3 py-1 rounded-lg bg-slate-900 text-white",onClick:()=>editEntry(e.id,{title,category,note})},"保存")
-            ) : React.createElement(React.Fragment,null,
-              React.createElement('button',{className:"px-3 py-1 rounded-lg border",onClick:()=>setEditing(true)},"編集"),
-              React.createElement('button',{className:"px-3 py-1 rounded-lg border",onClick:()=>removeEntry(e.id)},"削除"),
-              React.createElement('button',{className:"ml-auto px-3 py-1 rounded-lg bg-emerald-600 text-white",onClick:()=>sealEntry(e.id)},"封印（確定）")
-            )
-          ) : React.createElement('span',{className:"ml-auto text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 border"},"封印済み・編集不可")
+          React.createElement('button',{className:"px-3 py-1 rounded-lg border",onClick:()=>setEditing(true)},"編集"),
+          React.createElement('button',{className:"px-3 py-1 rounded-lg border",onClick:()=>removeEntry(e.id)},"削除"),
+          React.createElement('button',{className:"ml-auto px-3 py-1 rounded-lg bg-emerald-600 text-white",onClick:()=>sealEntry(e.id)},"封印（確定）")
         )
-      );
-    }
+      ) : React.createElement('span',{className:"ml-auto text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 border"},"封印済み・編集不可")
+    )
+  );
+}
 
-    // ====== ロック設定パネル ======
-    function LockPanel({ store, setStore, password, setPassword, persist, setMsg }){
-      const [pw1,setPw1]=useState(""); const [pw2,setPw2]=useState("");
-      if (!store.requiresPassword){
-        return React.createElement('div',null,
-          React.createElement('p',{className:"text-sm text-slate-600"},"現在：", React.createElement('span',{className:"font-semibold"},"パスワード未設定"), "（平文保存）"),
-          React.createElement('div',{className:"mt-3 space-y-2"},
-            React.createElement('input',{type:"password",className:"w-full border rounded-xl p-3",placeholder:"新しいパスワード",value:pw1,onChange:e=>setPw1(e.target.value)}),
-            React.createElement('input',{type:"password",className:"w-full border rounded-xl p-3",placeholder:"確認用パスワード",value:pw2,onChange:e=>setPw2(e.target.value)}),
-            React.createElement('button',{disabled:!pw1||pw1!==pw2,onClick:async()=>{ const next={...(store||emptyStore()), requiresPassword:true}; await persist(next); setPassword(pw1); setMsg("暗号化保存に切替えました（以後は解錠が必要）"); },className:"w-full rounded-xl bg-slate-900 text-white p-3 disabled:opacity-40"},"パスワードを設定して暗号化保存に切替")
-          ),
-          React.createElement('p',{className:"mt-2 text-xs text-slate-500"},"※ 忘れると復元できません。安全な場所に保管を。")
-        );
-      }
-      return React.createElement('div',null,
-        React.createElement('p',{className:"text-sm text-slate-600"},"現在：", React.createElement('span',{className:"font-semibold"},"暗号化保存"), "（AES-GCM）"),
-        React.createElement('div',{className:"mt-2"},
-          React.createElement('button',{onClick:()=>{ setStore(null); localStorage.setItem(LS_KEY+"_enc", localStorage.getItem(LS_KEY+"_enc")||""); location.reload(); },className:"w-full rounded-xl border p-3"},"今すぐ画面をロック")
-        )
-      );
-    }
+/* -------------- ロック設定 -------------- */
+function LockPanel({store,setStore,password,setPassword,persist,setMsg}){
+  const [pw1,setPw1]=useState(""), [pw2,setPw2]=useState("");
+  if(!store.requiresPassword){
+    return React.createElement('div',null,
+      React.createElement('p',{className:"text-sm text-slate-600"},"現在：",React.createElement('span',{className:"font-semibold"},"パスワード未設定"),"（平文保存）"),
+      React.createElement('div',{className:"mt-3 space-y-2"},
+        React.createElement('input',{type:"password",className:"w-full border rounded-xl p-3",placeholder:"新しいパスワード",value:pw1,onChange:e=>setPw1(e.target.value)}),
+        React.createElement('input',{type:"password",className:"w-full border rounded-xl p-3",placeholder:"確認用パスワード",value:pw2,onChange:e=>setPw2(e.target.value)}),
+        React.createElement('button',{disabled:!pw1||pw1!==pw2,onClick:async()=>{const next={...(store||emptyStore()),requiresPassword:true}; await persist(next); setPassword(pw1); setMsg("暗号化保存に切替えました（以後は解錠が必要）");},className:"w-full rounded-xl bg-slate-900 text-white p-3 disabled:opacity-40"},"パスワードを設定して暗号化保存に切替")
+      ),
+      React.createElement('p',{className:"mt-2 text-xs text-slate-500"},"※ 忘れると復元できません。安全な場所に保管を。")
+    );
+  }
+  return React.createElement('div',null,
+    React.createElement('p',{className:"text-sm text-slate-600"},"現在：",React.createElement('span',{className:"font-semibold"},"暗号化保存"),"（AES-GCM）"),
+    React.createElement('div',{className:"mt-2"},
+      React.createElement('button',{onClick:()=>{setStore(null);localStorage.setItem(LS_KEY+"_enc",localStorage.getItem(LS_KEY+"_enc")||"");location.reload();},className:"w-full rounded-xl border p-3"},"今すぐ画面をロック")
+    )
+  );
+}
 
-    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
-  </script>
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script>
 
-  <!-- =========================
-       PWAワンファイル設定（manifest を生成、SW 登録）
-       ========================= -->
-  <script>
-    (function(){
-      // manifest をその場生成してリンク（icon.png を参照）
-      const manifest = {
-        name: "Memo＋",
-        short_name: "Memo＋",
-        start_url: "./index.html",
-        display: "standalone",
-        background_color: "#ffffff",
-        theme_color: "#0f172a",
-        icons: [{ src: "./icon.png", sizes: "512x512", type: "image/png" }]
-      };
-      const blob = new Blob([JSON.stringify(manifest)], {type:"application/manifest+json"});
-      const url  = URL.createObjectURL(blob);
-      document.getElementById("dynamic-manifest").setAttribute("href", url);
+<!-- ===== PWA：manifest動的生成 & Service Worker登録（1ファイル完結） ===== -->
+<script>
+(function(){
+  // manifest を動的生成（相対スコープに対応）
+  const manifest = {
+    name: "Memo＋",
+    short_name: "Memo＋",
+    start_url: "./index.html",
+    scope: "./",
+    display: "standalone",
+    background_color: "#ffffff",
+    theme_color: "#0f172a",
+    icons: [{ src: "./icon.png", sizes: "512x512", type: "image/png", purpose: "any maskable" }]
+  };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:"application/manifest+json"}));
+  document.getElementById("manifest-link").setAttribute("href", url);
 
-      // 簡易Service Worker（キャッシュ）
-      if ('serviceWorker' in navigator) {
-        const swCode = `
-          const CACHE='memo-plus-v1';
-          const ASSETS=['./','./index.html','./icon.png'];
-          self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));});
-          self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));});
-          self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(x=>{const y=x.clone();caches.open(CACHE).then(c=>c.put(e.request,y));return x;})));});
-        `;
-        const swBlob = new Blob([swCode], {type:'text/javascript'});
-        const swUrl  = URL.createObjectURL(swBlob);
-        window.addEventListener('load', ()=> navigator.serviceWorker.register(swUrl) );
-      }
-    })();
-  </script>
-
-  <!-- 印刷時は「入力フォーム等を非表示」にして提出用PDFを綺麗に -->
-  <style>
-    @media print {
-      header, form, .print-hide { display:none !important; }
-      body { background:#fff; }
-      main { padding:0 !important; }
-      li { break-inside: avoid; }
-    }
-  </style>
+  // Service Worker をオンザフライで登録
+  if('serviceWorker' in navigator){
+    const swCode = `
+      const CACHE='memo-plus-v3';
+      const ASSETS=['./','./index.html','./icon.png'];
+      self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));});
+      self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));});
+      self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(x=>{const y=x.clone(); caches.open(CACHE).then(c=>c.put(e.request,y)); return x;})));});
+    `;
+    const swUrl = URL.createObjectURL(new Blob([swCode],{type:"text/javascript"}));
+    window.addEventListener('load', ()=>navigator.serviceWorker.register(swUrl,{scope:"./"}));
+  }
+})();
+</script>
 </body>
 </html>

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Memo＋</title>
   <meta name="theme-color" content="#0f172a" />
-  <meta name="description" content="改ざん防止・暗号化付き行動記録アプリ（画像添付／カテゴリ・検索AND/OR・並び替え・PDF印刷）" />
+  <meta name="description" content="改ざん防止・暗号化付き行動記録アプリ（画像添付／カテゴリ・検索AND/OR・並び替え・PDF印刷／感情ボタン＆寄り添いメッセージ）" />
 
   <!-- Tailwind & React (UMD) -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -30,7 +30,7 @@
     // ====== 共有ユーティリティ ======
     const enc = new TextEncoder();
     const dec = new TextDecoder();
-    const LS_KEY = "memo_plus_store_v3";      // ローカル保存キー
+    const LS_KEY = "memo_plus_store_v4";      // ローカル保存キー（感情フィールド追加でv4）
     const jpTime = (d) => new Date(d).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", hour12:false });
 
     async function sha256Hex(text){
@@ -67,9 +67,49 @@
       return JSON.parse(dec.decode(new Uint8Array(pt)));
     }
 
+    // ====== 感情セット＆寄り添いメッセージ ======
+    const MOODS = [
+      { key:"positive", label:"前向き", emoji:"🙂" },
+      { key:"normal",   label:"ふつう", emoji:"😶" },
+      { key:"hard",     label:"しんどい", emoji:"🥲" },
+      { key:"angry",    label:"いらだち", emoji:"😡" },
+      { key:"tired",    label:"つかれ", emoji:"😴" },
+    ];
+    const SUPPORT = {
+      positive: [
+        "いい流れ、ちゃんと掴めてる。今日の自分を褒めてあげてね。",
+        "前進できたね。小さな一歩でも積み重ねは力になるよ。",
+        "落ち着いて進められてる、すごい。自分のペースでOK。"
+      ],
+      normal: [
+        "淡々と続けられていること自体が大きな強さだよ。",
+        "大丈夫、十分できてる。完璧じゃなくていいからね。",
+        "呼吸を深く。今できる範囲でコツコツいこう。"
+      ],
+      hard: [
+        "しんどい中、ここまで記録できたことがすでに立派だよ。",
+        "つらいね。無理しすぎないで。温かい飲み物を一杯どう？",
+        "気持ちを言葉にできたのは強さ。あなたは一人じゃないよ。"
+      ],
+      angry: [
+        "その感情は正当だよ。事実を淡々と残せた自分を偉いって言ってあげて。",
+        "イラッとしたね。安全第一で、今日は自分を守る選択を優先してね。",
+        "落ち着いたら深呼吸。怒りは行動に変わるエネルギーにもなるよ。"
+      ],
+      tired: [
+        "よく頑張ったね。今日は早めに休む時間、少しでも作ろう。",
+        "疲れている時こそ“最小の一歩”。記録できた時点で合格だよ。",
+        "水分補給してね。明日の自分のために、いまは休む勇気も大切。"
+      ]
+    };
+    function pickSupport(moodKey){
+      const arr = SUPPORT[moodKey] || SUPPORT.normal;
+      return arr[Math.floor(Math.random()*arr.length)];
+    }
+
     // ====== データ形 ======
-    function emptyStore(){ return { version:3, requiresPassword:false, entries:[], images:{} }; }
-    function entryMaterial(e){ return [e.id,e.createdAt,e.sealedAt??"",e.title,e.category,e.note,(e.imageId||"")].join("|"); }
+    function emptyStore(){ return { version:4, requiresPassword:false, entries:[], images:{} }; }
+    function entryMaterial(e){ return [e.id,e.createdAt,e.sealedAt??"",e.title,e.category,e.note,(e.imageId||""),(e.moodKey||"")].join("|"); }
 
     // ====== ルートApp ======
     function App(){
@@ -133,13 +173,14 @@
       }
 
       // 追加・編集・封印・削除
-      async function addEntry({title,category,note,imageId}){
+      async function addEntry({title,category,note,imageId,moodKey}){
         const now = new Date().toISOString();
         const prev = store.entries[store.entries.length-1]?.hash ?? "GENESIS";
-        const draft = { id: uuid(), createdAt: now, sealedAt:null, title:title.trim(), category, note, imageId:imageId||null, prevHash: prev, hash:"" };
+        const draft = { id: uuid(), createdAt: now, sealedAt:null, title:title.trim(), category, note, imageId:imageId||null, moodKey: moodKey||null, prevHash: prev, hash:"" };
         draft.hash = await sha256Hex(prev+"|"+entryMaterial(draft));
         const next = { ...store, entries:[...store.entries,draft] };
         await persist(next);
+        if (moodKey){ setMsg(pickSupport(moodKey)); setTimeout(()=>setMsg(""), 6000); }
       }
       async function editEntry(id, fields){
         const idx = store.entries.findIndex(e=>e.id===id); if (idx<0) return; if (store.entries[idx].sealedAt) return;
@@ -183,11 +224,11 @@
         if(filterCat!=="all"){ arr = arr.filter(e=>e.category===filterCat); }
         if(searchText.trim()){
           const words = searchText.trim().split(/\s+/);
-          if(searchMode==="AND"){
-            arr = arr.filter(e=>words.every(w=> (e.title+e.note).includes(w)));
-          }else{
-            arr = arr.filter(e=>words.some(w=> (e.title+e.note).includes(w)));
-          }
+          arr = arr.filter(e=>{
+            const hay = (e.title+e.note+(e.moodKey||"")).toLowerCase();
+            if (searchMode==="AND")  return words.every(w=> hay.includes(w.toLowerCase()));
+            else                     return words.some(w=> hay.includes(w.toLowerCase()));
+          });
         }
         if(sortMode==="newest"){ arr.sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt)); }
         if(sortMode==="oldest"){ arr.sort((a,b)=> new Date(a.createdAt)-new Date(b.createdAt)); }
@@ -227,16 +268,16 @@
           React.createElement('div',{className:"sm:col-span-2"},
             React.createElement('section',{className:"bg-white rounded-2xl shadow p-4"},
               React.createElement('h2',{className:"font-semibold mb-3"},"📝 新規記録"),
-              React.createElement(NewEntryForm,{ onSubmit: async ({title,category,note,file})=>{
+              msg && React.createElement('div',{className:"mb-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-2"}, "💬 ", msg),
+              React.createElement(NewEntryForm,{ onSubmit: async ({title,category,note,file,moodKey})=>{
                 let imageId=null; if(file){ const r=await addImage(file); imageId=r.id; }
-                await addEntry({title,category,note,imageId});
+                await addEntry({title,category,note,imageId,moodKey});
               }})
             ),
             React.createElement('section',{className:"bg-white rounded-2xl shadow p-4 mt-4"},
               React.createElement('h2',{className:"font-semibold mb-3"},"🔐 ロック設定"),
               React.createElement(LockPanel,{store,setStore,password,setPassword,persist,setMsg})
-            ),
-            msg && React.createElement('div',{className:"mt-4 text-sm text-red-600"},msg)
+            )
           ),
 
           // 右：一覧（絞り込み・検索・並び替え）
@@ -274,7 +315,16 @@
       const [category,setCategory]=useState("観察");
       const [note,setNote]=useState("");
       const [file,setFile]=useState(null);
-      const handle=async(e)=>{ e.preventDefault(); if(!title.trim()&&!note.trim()&&!file) return; await onSubmit({title,category,note,file}); setTitle(""); setCategory("観察"); setNote(""); setFile(null); e.target.reset(); };
+      const [mood,setMood]=useState(null);
+
+      const handle=async(e)=>{ 
+        e.preventDefault(); 
+        if(!title.trim()&&!note.trim()&&!file) return; 
+        await onSubmit({title,category,note,file,moodKey:mood});
+        setTitle(""); setCategory("観察"); setNote(""); setFile(null); setMood(null);
+        e.target.reset(); 
+      };
+
       return React.createElement('form',{onSubmit:handle,className:"space-y-3"},
         React.createElement('div',null,
           React.createElement('label',{className:"block text-sm font-medium mb-1"},"タイトル（任意）"),
@@ -287,6 +337,21 @@
         React.createElement('div',null,
           React.createElement('label',{className:"block text-sm font-medium mb-1"},"本文"),
           React.createElement('textarea',{value:note,onChange:e=>setNote(e.target.value),className:"w-full border rounded-xl p-3 h-32",placeholder:`例：${new Date().toLocaleString('ja-JP',{ timeZone:'Asia/Tokyo', hour12:false })} 自宅を出発。コンビニで◯◯を購入（レシート添付）。その後◯◯方面へ。帰宅は21:05。会話の要点：……`})
+        ),
+        React.createElement('div',null,
+          React.createElement('label',{className:"block text-sm font-medium mb-1"},"今日の気持ち（任意）"),
+          React.createElement('div',{className:"flex flex-wrap gap-2"},
+            ...MOODS.map(m =>
+              React.createElement('button',{
+                type:"button",
+                key:m.key,
+                onClick:()=>setMood(m.key),
+                className:
+                  "px-3 py-1 rounded-full border "+
+                  (mood===m.key ? "bg-slate-900 text-white" : "bg-white text-slate-700")
+              }, `${m.emoji} ${m.label}`)
+            )
+          )
         ),
         React.createElement('div',null,
           React.createElement('label',{className:"block text-sm font-medium mb-1"},"画像（任意・PNG/JPEG・5MB以下）"),
@@ -303,7 +368,11 @@
       const [category,setCategory]=useState(e.category);
       const [note,setNote]=useState(e.note);
       const img = e.imageId ? (images||{})[e.imageId] : null;
+
       useEffect(()=>{ setTitle(e.title); setCategory(e.category); setNote(e.note); },[e]);
+
+      const moodDef = e.moodKey ? MOODS.find(m=>m.key===e.moodKey) : null;
+
       return React.createElement('li',{className:"rounded-xl border border-slate-200 bg-white p-4"},
         React.createElement('div',{className:"text-xs text-slate-500"},"作成: ", jpTime(e.createdAt), e.sealedAt?` ／ 封印: ${jpTime(e.sealedAt)}`:""),
         editing ? React.createElement('div',{className:"mt-2 space-y-2"},
@@ -312,7 +381,10 @@
           React.createElement('textarea',{className:"w-full border rounded-xl p-2 h-28",value:note,onChange:e=>setNote(e.target.value)})
         ) : React.createElement(React.Fragment,null,
           React.createElement('h3',{className:"mt-1 font-semibold"}, e.title || '（無題）'),
-          React.createElement('div',{className:"text-xs inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border"}, e.category),
+          React.createElement('div',{className:"flex gap-2 items-center mt-1"},
+            React.createElement('span',{className:"text-xs inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border"}, e.category),
+            moodDef && React.createElement('span',{className:"text-xs inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border"}, `${moodDef.emoji} ${moodDef.label}`)
+          ),
           img ? React.createElement('img',{src:img,alt:"添付画像",className:"mt-3 max-h-64 rounded-lg border"}) : null,
           React.createElement('p',{className:"mt-2 whitespace-pre-wrap text-sm"}, e.note)
         ),
@@ -402,4 +474,3 @@
   </style>
 </body>
 </html>
-

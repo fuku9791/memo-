@@ -11,8 +11,6 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-// 追加（一覧 or カレンダー）
-const [viewMode, setViewMode] = useState("list"); // "list" | "calendar"
 
 <!-- icons -->
 <link rel="icon" type="image/png" href="./icon.png">
@@ -100,6 +98,61 @@ function pickSupport(k){const a=SUPPORT[k]||SUPPORT.normal;return a[Math.floor(M
 function emptyStore(){return {version:4,requiresPassword:false,entries:[],images:{}}}
 function entryMaterial(e){return [e.id,e.createdAt,e.sealedAt??"",e.title,e.category,e.note,(e.imageId||""),(e.moodKey||"")].join("|")}
 
+/* ===================== カレンダー表示 ===================== */
+function CalendarView({ entries }) {
+  const [year, setYear] = React.useState(new Date().getFullYear());
+  const [month, setMonth] = React.useState(new Date().getMonth()); // 0=Jan
+  const first = new Date(year, month, 1);
+  const startWeekDay = first.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells = [];
+  for (let i = 0; i < startWeekDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const mapByDay = {};
+  for (const e of entries) {
+    const dt = new Date(e.createdAt);
+    if (dt.getFullYear() === year && dt.getMonth() === month) {
+      const d = dt.getDate();
+      (mapByDay[d] ||= []).push(e);
+    }
+  }
+  function move(delta){
+    const m = month + delta;
+    const base = new Date(year, m, 1);
+    setYear(base.getFullYear());
+    setMonth(base.getMonth());
+  }
+
+  return React.createElement('div', null,
+    React.createElement('div',{className:"flex items-center justify-between mb-3"},
+      React.createElement('button',{className:"px-3 py-1 rounded-lg border",onClick:()=>move(-1)},"← 前月"),
+      React.createElement('h3',{className:"font-semibold"}, `${year}年 ${month+1}月`),
+      React.createElement('button',{className:"px-3 py-1 rounded-lg border",onClick:()=>move(1)},"翌月 →")
+    ),
+    React.createElement('div',{className:"grid grid-cols-7 text-center text-xs text-slate-500 mb-1"},
+      ...["日","月","火","水","木","金","土"].map(w => React.createElement('div',{key:w,className:"py-1"}, w))
+    ),
+    React.createElement('div',{className:"grid grid-cols-7 gap-1"},
+      ...cells.map((d,idx)=>{
+        const todayItems = d ? (mapByDay[d] || []) : [];
+        return React.createElement('div',{key:idx,className:"min-h-24 border rounded-lg p-1 bg-white"},
+          React.createElement('div',{className:"text-right text-xs text-slate-500"}, d ? d : ""),
+          todayItems.slice(0,3).map(item =>
+            React.createElement('div',{key:item.id,className:"mt-1 text-[11px] truncate px-1 py-0.5 rounded bg-slate-100"},
+              (item.title || "（無題）")
+            )
+          ),
+          todayItems.length > 3 &&
+            React.createElement('div',{className:"mt-1 text-[11px] text-right text-slate-500"}, `+${todayItems.length-3} 件`)
+        );
+      })
+    )
+  );
+}
+
 /* ===================== App ===================== */
 function App(){
   const [store,setStore]=useState(null);
@@ -113,6 +166,9 @@ function App(){
   const [searchMode,setSearchMode]=useState("AND");
   const [searchText,setSearchText]=useState("");
   const [sortMode,setSortMode]=useState("newest");
+
+  // 表示モード（一覧/カレンダー）
+  const [viewMode, setViewMode] = useState("list"); // "list" | "calendar"
 
   useEffect(()=>{
     const encPayload=localStorage.getItem(LS_KEY+"_enc");
@@ -241,7 +297,17 @@ function App(){
           React.createElement('button',{className:"px-3 py-2 rounded-lg border",onClick:exportJson},"エクスポート"),
           React.createElement('label',{className:"px-3 py-2 rounded-lg border cursor-pointer"},"インポート",
             React.createElement('input',{type:"file",accept:"application/json",className:"hidden",onChange:e=>e.target.files?.[0]&&importJson(e.target.files[0])})
-          )
+          ),
+          /* ここから：一覧/カレンダー切替ボタン */
+          React.createElement('button',{
+            className:"px-3 py-2 rounded-lg border "+(viewMode==="list"?"bg-slate-900 text-white":""),
+            onClick:()=>setViewMode("list")
+          },"一覧"),
+          React.createElement('button',{
+            className:"px-3 py-2 rounded-lg border "+(viewMode==="calendar"?"bg-slate-900 text-white":""),
+            onClick:()=>setViewMode("calendar")
+          },"カレンダー")
+          /* ここまで */
         )
       )
     ),
@@ -263,29 +329,33 @@ function App(){
         )
       ),
 
-      /* 右カラム：一覧＋フィルタ/検索/並び替え */
+      /* 右カラム：一覧 or カレンダー */
       React.createElement('div',{className:"sm:col-span-3"},
         React.createElement('section',{className:"bg-white rounded-2xl shadow p-4"},
-          React.createElement('div',{className:"flex flex-wrap gap-2 mb-3"},
-            React.createElement('select',{value:filterCat,onChange:e=>setFilterCat(e.target.value),className:"border rounded-lg p-2"},
-              React.createElement('option',{value:"all"},"すべて"),
-              ['観察','会話','支出','場所','その他'].map(c=>React.createElement('option',{key:c,value:c},c))
-            ),
-            React.createElement('select',{value:searchMode,onChange:e=>setSearchMode(e.target.value),className:"border rounded-lg p-2"},
-              React.createElement('option',{value:"AND"},"AND検索"),
-              React.createElement('option',{value:"OR"},"OR検索")
-            ),
-            React.createElement('input',{type:"text",placeholder:"検索ワード（スペース区切り）",value:searchText,onChange:e=>setSearchText(e.target.value),className:"flex-1 border rounded-lg p-2"}),
-            React.createElement('select',{value:sortMode,onChange:e=>setSortMode(e.target.value),className:"border rounded-lg p-2"},
-              React.createElement('option',{value:"newest"},"新しい順"),
-              React.createElement('option',{value:"oldest"},"古い順")
+          viewMode === "list"
+          ? React.createElement(React.Fragment,null,
+              React.createElement('div',{className:"flex flex-wrap gap-2 mb-3"},
+                React.createElement('select',{value:filterCat,onChange:e=>setFilterCat(e.target.value),className:"border rounded-lg p-2"},
+                  React.createElement('option',{value:"all"},"すべて"),
+                  ['観察','会話','支出','場所','その他'].map(c=>React.createElement('option',{key:c,value:c},c))
+                ),
+                React.createElement('select',{value:searchMode,onChange:e=>setSearchMode(e.target.value),className:"border rounded-lg p-2"},
+                  React.createElement('option',{value:"AND"},"AND検索"),
+                  React.createElement('option',{value:"OR"},"OR検索")
+                ),
+                React.createElement('input',{type:"text",placeholder:"検索ワード（スペース区切り）",value:searchText,onChange:e=>setSearchText(e.target.value),className:"flex-1 border rounded-lg p-2"}),
+                React.createElement('select',{value:sortMode,onChange:e=>setSortMode(e.target.value),className:"border rounded-lg p-2"},
+                  React.createElement('option',{value:"newest"},"新しい順"),
+                  React.createElement('option',{value:"oldest"},"古い順")
+                )
+              ),
+              filteredEntries().length===0
+                ? React.createElement('p',{className:"text-sm text-slate-500"},"該当する記録はありません。")
+                : React.createElement('ul',{className:"space-y-3"},
+                    filteredEntries().map(e=>React.createElement(EntryCard,{key:e.id,e,images:store.images,editEntry,sealEntry,removeEntry}))
+                  )
             )
-          ),
-          filteredEntries().length===0
-            ? React.createElement('p',{className:"text-sm text-slate-500"},"該当する記録はありません。")
-            : React.createElement('ul',{className:"space-y-3"},
-                filteredEntries().map(e=>React.createElement(EntryCard,{key:e.id,e,images:store.images,editEntry,sealEntry,removeEntry}))
-              )
+          : React.createElement(CalendarView,{entries:store.entries})
         )
       )
     )
@@ -358,7 +428,7 @@ function EntryCard({e,images,editEntry,sealEntry,removeEntry}){
         React.createElement('span',{className:"text-xs inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border"},e.category),
         moodDef && React.createElement('span',{className:"text-xs inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border"},`${moodDef.emoji} ${moodDef.label}`)
       ),
-      img && React.createElement('img',{src:img,alt:"添付画像",className:"mt-3 max-h-64 rounded-lg border"}),
+      img ? React.createElement('img',{src:img,alt:"添付画像",className:"mt-3 max-h-64 rounded-lg border"}) : null,
       React.createElement('p',{className:"mt-2 whitespace-pre-wrap text-sm"},e.note)
     ),
     React.createElement('div',{className:"mt-3 flex items-center gap-2"},
@@ -404,7 +474,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(
 <!-- ===== PWA：manifest動的生成 & Service Worker登録（1ファイル完結） ===== -->
 <script>
 (function(){
-  // manifest を動的生成（相対スコープに対応）
   const manifest = {
     name: "Memo＋",
     short_name: "Memo＋",
@@ -418,10 +487,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(
   const url = URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:"application/manifest+json"}));
   document.getElementById("manifest-link").setAttribute("href", url);
 
-  // Service Worker をオンザフライで登録
   if('serviceWorker' in navigator){
     const swCode = `
-      const CACHE='memo-plus-v3';
+      const CACHE='memo-plus-v8';
       const ASSETS=['./','./index.html','./icon.png'];
       self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));});
       self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));});

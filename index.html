@@ -8,9 +8,9 @@
 <meta name="description" content="改ざん検知＋暗号化＋画像添付。カテゴリ/検索(AND/OR)/並び替え/提出用PDF/感情ボタン＆寄り添いメッセージ付きメモアプリ" />
 
 <!-- UI -->
-<script src="https://cdn.tailwindcss.com"></script>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.tailwindcss.com"><\/script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>
 
 <!-- icons (重要: icon.png / apple-touch-icon.png を同階層に置く) -->
 <link rel="icon" type="image/png" sizes="512x512" href="./icon.png">
@@ -173,7 +173,7 @@ function buildConsultHtml(entries){
   <script>
     // 生成後すぐ印刷ダイアログを開く（必要ならコメントアウトOK）
     setTimeout(()=>window.print(), 250);
-  </script>
+  <\/script>
 </body></html>`;
 }
 function printConsultPDF(entries){
@@ -818,7 +818,7 @@ function LockPanel({store,setStore,password,setPassword,persist,setMsg}){
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
-</script>
+<\/script>
 
 <!-- ===== PWA：manifest動的生成 & Service Worker登録 ===== -->
 <script>
@@ -866,6 +866,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(
     window.addEventListener('load', ()=>navigator.serviceWorker.register(swUrl,{scope:"./"}));
   }
 })();
-</script>
+<\/script>
 </body>
 </html>

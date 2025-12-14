@@ -458,12 +458,10 @@ function App(){
           ),
 
           React.createElement('button',{
-            className:"px-3 py-2 rounded-lg border",
-            onClick:()=> {
-              try{ printConsultPDF(filtered); }
-              catch(e){ alert("PDF出力エラー: " + (e?.message||e)); console.error(e); }
-            }
-          },"相談用PDF"),
+  className:"px-3 py-2 rounded-lg border",
+  onClick:()=>window.print()
+},"相談用PDF")
+
 
           React.createElement('button',{className:"px-3 py-2 rounded-lg border",onClick:exportJson},"エクスポート"),
           React.createElement('label',{className:"px-3 py-2 rounded-lg border cursor-pointer"},"インポート",

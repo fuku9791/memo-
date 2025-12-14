@@ -293,17 +293,7 @@ function App(){
       React.createElement('div',{className:"max-w-5xl mx-auto px-4 py-3 flex flex-wrap gap-2 items-center justify-between"},
         React.createElement('h1',{className:"font-bold text-xl"},"Memo＋（改ざん検知・鍵付き）"),
         React.createElement('div',{className:"flex flex-wrap gap-2"},
-          React.createElement('button',{
-           className:"px-3 py-2 rounded-lg border",
-           onClick:()=>{
-            try{
-             printConsultPDF(filteredEntries());
-            }catch(e){
-             alert("PDF出力エラー:"+(e?.message || e));
-             console.error(e);
-            }
-          }
-         },"相談用PDF")
+          React.createElement('div',{className:"sm:col-span-2 print-hide"},
           React.createElement('button',{className:"px-3 py-2 rounded-lg border",onClick:exportJson},"エクスポート"),
           React.createElement('label',{className:"px-3 py-2 rounded-lg border cursor-pointer"},"インポート",
             React.createElement('input',{type:"file",accept:"application/json",className:"hidden",onChange:e=>e.target.files?.[0]&&importJson(e.target.files[0])})

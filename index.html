@@ -152,6 +152,113 @@ function CalendarView({ entries }) {
     )
   );
 }
+/* ===================== 相談用PDF（印刷専用）ここだけ追加 ===================== */
+function escapeHtml(s=""){
+  return String(s)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function buildConsultHtml(entries, imagesMap={}){
+  const rows = entries.map((e,i)=>{
+    const img = e.imageId ? imagesMap?.[e.imageId] : null;
+    const mood = e.moodKey ? (MOODS.find(m=>m.key===e.moodKey)?.label || e.moodKey) : "";
+    const moodEmoji = e.moodKey ? (MOODS.find(m=>m.key===e.moodKey)?.emoji || "") : "";
+
+    return `
+      <section class="card">
+        <div class="meta">
+          <span>No.${i+1}</span>
+          <span>作成：${escapeHtml(jpTime(e.createdAt))}</span>
+          ${e.sealedAt ? `<span>封印：${escapeHtml(jpTime(e.sealedAt))}</span>` : ``}
+        </div>
+
+        <h2 class="title">${escapeHtml(e.title || "（無題）")}</h2>
+
+        <div class="tags">
+          <span class="tag">カテゴリ：${escapeHtml(e.category || "")}</span>
+          ${mood ? `<span class="tag">気持ち：${escapeHtml(moodEmoji + " " + mood)}</span>` : ``}
+        </div>
+
+        ${img ? `<img class="img" src="${img}" alt="添付画像">` : ``}
+
+        <pre class="body">${escapeHtml(e.note || "")}</pre>
+
+        <div class="hash">
+          <div>改ざん検知ハッシュ：${escapeHtml(e.hash || "")}</div>
+          <div>前ハッシュ：${escapeHtml(e.prevHash || "")}</div>
+        </div>
+      </section>
+    `;
+  }).join("");
+
+  return `
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Memo＋ 相談用PDF</title>
+<style>
+  body{ font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif; margin:0; background:#f5f7fb; }
+  .wrap{ max-width: 860px; margin: 0 auto; padding: 18px; }
+  .header{ background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:14px 16px; }
+  .h1{ font-size:18px; font-weight:700; margin:0 0 6px; }
+  .sub{ font-size:12px; color:#475569; margin:0; line-height:1.4; }
+  .card{ background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:14px 16px; margin-top:12px; page-break-inside: avoid; }
+  .meta{ display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:#64748b; }
+  .title{ margin:8px 0 6px; font-size:16px; }
+  .tags{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+  .tag{ font-size:12px; background:#f1f5f9; border:1px solid #e2e8f0; padding:3px 8px; border-radius:999px; color:#334155; }
+  .img{ width:100%; max-height: 360px; object-fit:contain; border:1px solid #e5e7eb; border-radius:10px; margin:10px 0; }
+  .body{ white-space:pre-wrap; font-size:13px; line-height:1.6; margin:0; }
+  .hash{ margin-top:10px; font-size:11px; color:#64748b; border-top:1px dashed #e2e8f0; padding-top:8px; word-break:break-all; }
+
+  @media print{
+    body{ background:#fff; }
+    .wrap{ padding:0; }
+    .header{ border:none; border-bottom:1px solid #e5e7eb; border-radius:0; }
+    .card{ border:1px solid #d1d5db; border-radius:10px; }
+    .sub{ color:#111827; }
+    @page { margin: 12mm; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <p class="h1">Memo＋ 相談用PDF（印刷）</p>
+      <p class="sub">
+        出力日時：${escapeHtml(jpTime(new Date().toISOString()))}<br>
+        ※ 提出用に文章のみ整形した印刷専用ページです（検索窓・ボタン等は出ません）
+      </p>
+    </div>
+
+    ${rows || `<div class="card"><p class="body">該当する記録がありません。</p></div>`}
+  </div>
+
+<script>
+  window.onload = () => { setTimeout(()=>window.print(), 200); };
+<\/script>
+</body>
+</html>
+  `;
+}
+
+function printConsultPDF(entries, imagesMap){
+  const html = buildConsultHtml(entries, imagesMap);
+  const w = window.open("", "_blank");
+  if(!w){
+    alert("ポップアップがブロックされました。ブラウザ設定で許可してください。");
+    return;
+  }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
 
 /* ===================== App ===================== */
 function App(){
